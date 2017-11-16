@@ -26,7 +26,7 @@
 
 - **多目标代价函数**
 
-  1. hinge loss ：![L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)](/upload/ask/75/g/gif.latex_1%2Bsin%28mc%5E2%29%0D%0A)
+  1. hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)$
 
   2. square hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)^2$
 
