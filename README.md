@@ -9,15 +9,13 @@
 
 ---
 
-<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default">
-
 ## [Assignment 1](http://cs231n.github.io/assignments2016/assignment1/)
 
 ### knn
 
 - **代码实现：assign1_knn.py**
 - **两种距离度量方法**
-  1. L1(Manhattan) distance ：$d_1(\textbf I_1, \textbf I_2) = \sum_p|\textbf I_1^p - \textbf I_2^p|$ 
+  1. L1(Manhattan) distance ：<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default">$d_1(\textbf I_1, \textbf I_2) = \sum_p|\textbf I_1^p - \textbf I_2^p|$ </script>
   2. L2(Euclidean)  distance ：$d_2(\textbf I_1, \textbf I_2) = \sqrt{\sum_p(|\textbf I_1^p - \textbf I_2^p|)^2}$
 - **说明**
   算法预测准确率比较低，k=1时大概为27%左右。可以全局搜索k的最优值。
@@ -45,8 +43,6 @@
   \end{cases}
   $$
   ​
-
-  </script>
 
   ​
 
