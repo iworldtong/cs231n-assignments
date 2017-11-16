@@ -9,6 +9,8 @@
 
 ---
 
+<script type="text/javascript" src="[http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
+
 ## [Assignment 1](http://cs231n.github.io/assignments2016/assignment1/)
 
 ### knn
