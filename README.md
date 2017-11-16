@@ -15,7 +15,7 @@
 
 - **代码实现：assign1_knn.py**
 - **两种距离度量方法**
-  1. L1(Manhattan) distance ：<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default">$$d_1(\textbf I_1, \textbf I_2) = \sum_p|\textbf I_1^p - \textbf I_2^p|$$</script>
+  1. L1(Manhattan) distance ：$d_1(\textbf I_1, \textbf I_2) = \sum_p|\textbf I_1^p - \textbf I_2^p|$
   2. L2(Euclidean)  distance ：$d_2(\textbf I_1, \textbf I_2) = \sqrt{\sum_p(|\textbf I_1^p - \textbf I_2^p|)^2}$
 - **说明**
   算法预测准确率比较低，k=1时大概为27%左右。可以全局搜索k的最优值。
@@ -26,7 +26,7 @@
 
 - **多目标代价函数**
 
-  1. hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)$
+  1. hinge loss ：![$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)$](/upload/ask/75/g/gif.latex_1%2Bsin%28mc%5E2%29%0D%0A)
 
   2. square hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)^2$
 
