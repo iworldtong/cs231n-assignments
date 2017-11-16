@@ -15,8 +15,8 @@
 
 - **代码实现：assign1_knn.py**
 - **两种距离度量方法**
-  1. L1(Manhattan) distance ：$d\_1(\textbf I\_1, \textbf I\_2) = \sum\_p|\textbf I\_1^p - \textbf I\_2^p|$ 
-  2. L2(Euclidean)  distance ：$d\_2(\textbf I\_1, \textbf I\_2) = \sqrt{\sum\_p(|\textbf I\_1^p - \textbf I\_2^p|)^2}$
+  1. L1(Manhattan) distance ：$d_1(\textbf I_1, \textbf I_2) = \sum_p|\textbf I_1^p - \textbf I_2^p|$ 
+  2. L2(Euclidean)  distance ：$d_2(\textbf I_1, \textbf I_2) = \sqrt{\sum_p(|\textbf I_1^p - \textbf I_2^p|)^2}$
 
 ### SVM
 
@@ -24,9 +24,10 @@
 
 - **多目标代价函数**
 
-  1. hinge loss ：$L\_i=\sum\_{j\ne y\_i}max(0, s\_j-s\_{y\_i}+1)$
-  2. square hinge loss ：$L\_i=\sum\_{j\ne y\_i}max(0, s\_j-s\_{y\_i}+1)^2$
+  1. hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+1)$
+  2. square hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+1)^2$
 
   ​
 
   ​
+
