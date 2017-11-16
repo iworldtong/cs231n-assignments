@@ -17,6 +17,8 @@
 - **两种距离度量方法**
   1. L1(Manhattan) distance ：$d_1(\textbf I_1, \textbf I_2) = \sum_p|\textbf I_1^p - \textbf I_2^p|$ 
   2. L2(Euclidean)  distance ：$d_2(\textbf I_1, \textbf I_2) = \sqrt{\sum_p(|\textbf I_1^p - \textbf I_2^p|)^2}$
+- **说明**
+  算法预测准确率比较低，k=1时大概为27%左右。可以全局搜索k的最优值。
 
 ### SVM
 
@@ -24,8 +26,23 @@
 
 - **多目标代价函数**
 
-  1. hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+1)$
-  2. square hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+1)^2$
+  1. hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)$
+
+  2. square hinge loss ：$L_i=\sum_{j\ne y_i}max(0, s_j-s_{y_i}+\Delta)^2$
+
+     其中，$y_i$指第$i$个样本的真实标签，$s_j$代表输入第$i$个样本后预测为第$j$类的可能性。
+
+- **采用随机梯度下降优化**
+  SVM的梯度为：
+  $$
+  \begin{cases}
+  \begin{eqnarray}
+  \nabla_{w_{y_i}}L_i &=& -\left(\sum_{k \ne y_i} 1(w_k^Tx_i-w_{y_i}^Tx_i+\Delta \gt 0)  \right)x_i \quad  &j=&y_i\\
+  \nabla_{w_{j}}L_i &=& 1(w_j^Tx_i-w_{y_i}^Tx_i+\Delta \gt 0)x_i  &j\ne&y_i
+  \end{eqnarray}
+  \end{cases}
+  $$
+  ​
 
   ​
 
