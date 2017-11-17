@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import gradient_check as grad_ck
 
 
+
 def main():
 
 	# load cifar10 data set
@@ -17,7 +18,7 @@ def main():
 	num_train = 49000
 	num_val   = 1000
 	num_test  = 1000
-	num_dev   = 500
+	num_dev   = 1
 
 	# get val set
 	mask = list(range(num_train, num_train + num_val))
@@ -47,12 +48,12 @@ def main():
 	dev_images = np.hstack([dev_images, np.ones((dev_images.shape[0], 1))])
 	test_images = np.hstack([test_images, np.ones((test_images.shape[0], 1))])
 	
-	# SVM Classifier
-	classifier = linear_svm()
+	# Softmax Classifier
+	classifier = softmax()
 
-	# training
+	#classifier.train(train_images, train_labels)
 	loss_hist = classifier.train(train_images, train_labels, num_classes)
-
+	
 	# test
 	predict_labels = classifier.predict(test_images)
 
@@ -82,7 +83,7 @@ def main():
 	plt.show()
 
 
-class linear_svm(object):
+class softmax(object):
 	def __init__(self):
 		self.show_step = 100
 		self.batch_size=128
@@ -92,27 +93,15 @@ class linear_svm(object):
 	def train(self, input_data, labels, num_classes, 
 				num_iters=10, 
 				init_W=True, 
-				disp=True,
-				grad_ck_flag=False):
+				disp=True):
 
 		num_data = input_data.shape[0]
 		loss_list = []
 
-		# 初始化权重矩阵，以及代码检查
 		if init_W:
 			self.W = np.random.randn(input_data.shape[1], num_classes) * 0.0001
-			
-			if grad_ck_flag:
-				# 梯度检验 ： 比较公式计算出的梯度与数值梯度的差值，检查代码是否存在bug
-				f = lambda W: self.get_loss_and_grad(W, input_data, labels, 0.0)[0]
-				print("Check gradients:")
-				grad_numerical = grad_ck.grad_check_sparse(f, self.W, grad)
-		
-		# 当权重很小时， loss 约等于 (num_class - 1) --> 理论值
 		loss, grad = self.get_loss_and_grad(self.W, input_data, labels, reg=self.reg)
-		print('Check loss function : initial loss :', "%0.4f"%loss, '  theoretical value :', str(num_classes - 1))
-		
-		# 迭代训练
+
 		iters = 1
 		step = 1
 		while iters <= num_iters:
@@ -133,33 +122,23 @@ class linear_svm(object):
 		return loss_list
 
 
-	def get_loss_and_grad(self, W, test_data, test_labels, reg=0.1, delta=1):
-		'''
-			calc hinge loss with no loop
-		'''
+	def get_loss_and_grad(self, W, test_data, test_labels, reg=0.1):
+		num_data = len(test_labels)
 		dW = np.zeros(W.shape, dtype=float)
-		num_data = test_data.shape[0]
-		loss = 0.0
+		score_matrix = np.exp(np.dot(test_data, W))
+		sum_score_vec = np.sum(score_matrix, axis=1)
+		normal_score_matrix = score_matrix / sum_score_vec.reshape(-1,1)
 
-		# Calc hinge loss with 
-		score_matrix = np.dot(test_data, W)
-		score_matrix -= score_matrix[list(range(len(test_labels))), test_labels].reshape(-1, 1) 
-		score_matrix += delta
-		score_matrix[list(range(len(test_labels))), test_labels] = 0 
-		score_matrix[score_matrix < 0] = 0
-		loss = np.sum(score_matrix) / num_data
+		# calc loss		
+		loss_vec = score_matrix[list(range(num_data)), test_labels] / sum_score_vec
+		loss_vec = -np.log(loss_vec)
+		loss = np.sum(loss_vec) + 0.5 * reg * np.sum(W ** 2)
 
-		# Add regularization to the loss
-		loss += 0.5 * reg * np.sum(W ** 2)
-
-		# calc the gradient of the loss function
-		bin_score_matrix = np.zeros(score_matrix.shape)
-		bin_score_matrix[score_matrix > 0] = 1
+		# calc gradient	
 		for i in range(num_data):
-			temp = test_data[i].reshape(-1,1) * bin_score_matrix[i]
-			temp[:, test_labels[i]] = - np.sum(bin_score_matrix[i]) * test_data[i]
+			temp = normal_score_matrix[i] * test_data[i].reshape(-1,1)
+			temp[:, test_labels[i]] -= test_data[i]
 			dW += temp
-		dW /= num_data
 
 		return loss, dW
 
@@ -168,7 +147,7 @@ class linear_svm(object):
 		predict_labels = np.argmax(score_matrix, axis=1)
 		return predict_labels
 
-	
+
 
 if __name__ == '__main__':
 	main()
