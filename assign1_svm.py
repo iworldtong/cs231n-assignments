@@ -1,7 +1,7 @@
 import config as cfg
 import numpy as np
 import matplotlib.pyplot as plt
-import gradient_check as grad_ck
+import utils.gradient_check as grad_ck
 
 
 def main():

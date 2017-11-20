@@ -1,8 +1,8 @@
 import config as cfg
 import numpy as np
 import matplotlib.pyplot as plt
-import gradient_check as grad_ck
-import vis_utils 
+import utils.gradient_check as grad_ck
+import utils.vis_utils as vis_utils
 from tensorflow.examples.tutorials.mnist import input_data
 
 
@@ -69,7 +69,7 @@ def main(data_set="mnist"):
 
 	net = two_layer_net(input_size, hidden_size, num_classes)
 	#net.gradiant_check(train_images, train_labels) # !!! will use too much time !!!
-	
+
 	stats = net.train(train_images, train_labels, num_iters=20)
 
 	print('Final training loss: ', stats['loss_history'][-1])
