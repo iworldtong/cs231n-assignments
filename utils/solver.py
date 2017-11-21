@@ -1,7 +1,7 @@
 import os
 import pickle as pickle
 import numpy as np
-import optim
+import utils.optim as optim
 
 
 class Solver(object):

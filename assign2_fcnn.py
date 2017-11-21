@@ -7,6 +7,7 @@ from utils.layers import *
 from utils.layer_utils import *
 from utils.vis_utils import *
 from utils.gradient_check import *
+from utils.solver import *
 
 
 
@@ -14,14 +15,12 @@ def rel_error(x, y):
   return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
-
-
-def main(data_set="mnist"):
+def main(data_set="cifar10"):
 	if data_set == "cifar10":
 		# load cifar10 data set
 		train_images, train_labels, test_images, test_labels = cfg.load_cifar10()
-		train_images = train_images.astype(float)
-		test_images = test_images.astype(float)
+		train_images = train_images.astype(np.float64)
+		test_images = test_images.astype(np.float64)
 		classes = cfg.CIFAR10_classes
 		train_images /= 255.
 		test_images /= 255.
@@ -38,21 +37,19 @@ def main(data_set="mnist"):
 	N, D, H1, H2, C = 2, 15, 20, 30, 10
 	X = np.random.randn(N, D)
 	y = np.random.randint(C, size=(N,))
-
 	for reg in [0, 3.14]:
 		print('Running check with reg = ', reg)
 		model = FullyConnectedNet([H1, H2], input_dim=D, num_classes=C,
 								  reg=reg, weight_scale=5e-2, dtype=np.float64)
-
 		loss, grads = model.loss(X, y)
 		print('Initial loss: ', np.sum(loss))
-
 		print('Gradiant check:')
 		for k, v in model.params.items():
 			for index, item in enumerate(model.params[k]):
 				f = lambda _: model.loss(X, y)[0]
 				grad_num = eval_numerical_gradient(f, item, verbose=False, h=1e-5)
 				print('%s%d relative error: %.2e' % (k, index, rel_error(grad_num, grads[k][index])))
+
 
 
 
@@ -113,7 +110,8 @@ class FullyConnectedNet(object):
 			for index, item in enumerate(self.params[k]):
 				self.params[k][index] = item.astype(dtype)
 
-
+	def train(self, ):
+		pass
 
 	def loss(self, X, y=None):
 		X = X.astype(self.dtype)
@@ -145,6 +143,8 @@ class FullyConnectedNet(object):
 
 		# loss
 		loss, d_softmax = softmax_loss(out_hist[-1], y)
+		for l in range(self.num_layers):
+			loss += self.reg * np.sum(self.params['W'][l] ** 2)
 
 		# gradiant
 		grads = {}
@@ -164,28 +164,12 @@ class FullyConnectedNet(object):
 				dx, dw, db = affine_relu_backward(dx, cache_hist[l])
 				grads['b'][l] = db
 				grads['W'][l] = dw
-
+			
+			grads['W'][l] += 2 * self.reg * self.params['W'][l]
 
 		return loss, grads
 
 
 
-
-
-
 if __name__ == '__main__':
 	main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
