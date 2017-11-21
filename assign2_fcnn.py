@@ -33,22 +33,30 @@ def main(data_set="cifar10"):
 		classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
 
-	np.random.seed(231)
-	N, D, H1, H2, C = 2, 15, 20, 30, 10
-	X = np.random.randn(N, D)
-	y = np.random.randint(C, size=(N,))
-	for reg in [0, 3.14]:
-		print('Running check with reg = ', reg)
-		model = FullyConnectedNet([H1, H2], input_dim=D, num_classes=C,
-								  reg=reg, weight_scale=5e-2, dtype=np.float64)
-		loss, grads = model.loss(X, y)
-		print('Initial loss: ', np.sum(loss))
-		print('Gradiant check:')
-		for k, v in model.params.items():
-			for index, item in enumerate(model.params[k]):
-				f = lambda _: model.loss(X, y)[0]
-				grad_num = eval_numerical_gradient(f, item, verbose=False, h=1e-5)
-				print('%s%d relative error: %.2e' % (k, index, rel_error(grad_num, grads[k][index])))
+	num_train = 50
+	num_dev = 10
+	small_data = {
+	  'X_train': train_images[:num_train],
+	  'y_train': train_labels[:num_train],
+	  'X_val': train_images[:num_dev],
+	  'y_val': train_labels[:num_dev],
+	}
+
+	learning_rate = 1e-3
+	weight_scale = 1e-5
+	model = FullyConnectedNet([100, 100, 100, 100], weight_scale=weight_scale, dtype=np.float64)
+	solver = Solver(model, small_data,
+	                print_every=10, num_epochs=20, batch_size=25,
+	                update_rule='sgd',
+	                optim_config={'learning_rate': learning_rate}
+	         	)
+	solver.train()
+
+	plt.plot(solver.loss_history, 'o')
+	plt.title('Training loss history')
+	plt.xlabel('Iteration')
+	plt.ylabel('Training loss')
+	plt.show()
 
 
 
@@ -77,15 +85,9 @@ class FullyConnectedNet(object):
 		# When using batch normalization, store scale and shift parameters 
 		# For the first layer in gamma1 and beta1; for the second layer use gamma2 and beta2, etc. 
 		# Scale parameters should be initialized to one and shift parameters should be initialized to zero. 
-		self.params['W'] = []
-		self.params['b'] = []
-		self.params['beta'] = []
-		self.params['gamma'] = []
 		for l in range(self.num_layers):
-			W = weight_scale * np.random.random((self.dim_list[l], self.dim_list[l+1]))
-			b = np.zeros(self.dim_list[l+1])
-			self.params['W'].append(W)
-			self.params['b'].append(b)
+			self.params['W' + str(l+1)] = weight_scale * np.random.random((self.dim_list[l], self.dim_list[l+1]))
+			self.params['b' + str(l+1)] = np.zeros(self.dim_list[l+1])
 
         # When using dropout we need to pass a dropout_param dictionary to each
         # dropout layer so that the layer knows the dropout probability and the mode
@@ -107,8 +109,7 @@ class FullyConnectedNet(object):
 
 		# Cast all parameters to the correct datatype
 		for k, v in self.params.items():
-			for index, item in enumerate(self.params[k]):
-				self.params[k][index] = item.astype(dtype)
+			self.params[k] = v.astype(dtype)
 
 	def train(self, ):
 		pass
@@ -131,10 +132,10 @@ class FullyConnectedNet(object):
 		out = X.copy()
 		for l in range(self.num_layers):
 			if l < (self.num_layers - 1):	
-				out, cache = affine_relu_forward(out, self.params['W'][l], self.params['b'][l])
+				out, cache = affine_relu_forward(out, self.params['W'+str(l+1)], self.params['b'+str(l+1)])
 				cache_hist.append(cache)
 			else:	
-				out = np.dot(out, self.params['W'][l]) + self.params['b'][l]
+				out = np.dot(out, self.params['W'+str(l+1)]) + self.params['b'+str(l+1)]
 			out_hist.append(out)
 
 		if mode == 'test':
@@ -144,28 +145,26 @@ class FullyConnectedNet(object):
 		# loss
 		loss, d_softmax = softmax_loss(out_hist[-1], y)
 		for l in range(self.num_layers):
-			loss += self.reg * np.sum(self.params['W'][l] ** 2)
+			loss += self.reg * np.sum(self.params['W'+str(l+1)] ** 2)
 
 		# gradiant
 		grads = {}
 		for k, v in self.params.items():
-			grads[k] = []
-			for index, item in enumerate(self.params[k]):
-				grads[k].append(np.zeros(item.shape))
+			grads[k] = np.zeros(v.shape)
 
 		# backward
 		for l in range(self.num_layers-1, -1, -1):
 			if l == self.num_layers - 1:
 				# softmax backward
-				grads['b'][l] = np.sum(d_softmax, 0)
-				grads['W'][l] = np.dot(out_hist[l-1].T, d_softmax)
-				dx = np.dot(d_softmax, self.params['W'][l].T)
+				grads['b'+str(l+1)] = np.sum(d_softmax, 0)
+				grads['W'+str(l+1)] = np.dot(out_hist[l-1].T, d_softmax)
+				dx = np.dot(d_softmax, self.params['W'+str(l+1)].T)
 			else:
 				dx, dw, db = affine_relu_backward(dx, cache_hist[l])
-				grads['b'][l] = db
-				grads['W'][l] = dw
+				grads['b'+str(l+1)] = db
+				grads['W'+str(l+1)] = dw
 			
-			grads['W'][l] += 2 * self.reg * self.params['W'][l]
+			grads['W'+str(l+1)] += 2 * self.reg * self.params['W'+str(l+1)]
 
 		return loss, grads
 
