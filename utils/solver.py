@@ -1,6 +1,8 @@
 import os
 import pickle as pickle
+
 import numpy as np
+
 import utils.optim as optim
 
 
@@ -154,6 +156,7 @@ class Solver(object):
         self.val_acc_history = []
 
         # Make a deep copy of the optim_config for each parameter
+        self.optim_configs = {}
         for p in self.model.params:
             d = {k: v for k, v in self.optim_config.items()}
             self.optim_configs[p] = d
