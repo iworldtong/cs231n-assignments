@@ -14,7 +14,6 @@ def rel_error(x, y):
   return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
-
 def main(data_set="cifar10"):
 	if data_set == "cifar10":
 		# load cifar10 data set
@@ -31,12 +30,29 @@ def main(data_set="cifar10"):
 		test_images = mnist.test.images
 		test_labels = mnist.test.labels
 		classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-	
 
-	dropout_cmp(train_images, train_labels)
-	
-	#update_cmp(train_images, train_labels)
+	# Gradient check batchnorm backward pass
+	np.random.seed(231)
+	N, D = 4, 5
+	x = 5 * np.random.randn(N, D) + 12
+	gamma = np.random.randn(D)
+	beta = np.random.randn(D)
+	dout = np.random.randn(N, D)
 
+	bn_param = {'mode': 'train'}
+	fx = lambda x: batchnorm_forward(x, gamma, beta, bn_param)[0]
+	fg = lambda a: batchnorm_forward(x, a, beta, bn_param)[0]
+	fb = lambda b: batchnorm_forward(x, gamma, b, bn_param)[0]
+
+	dx_num = eval_numerical_gradient_array(fx, x, dout)
+	da_num = eval_numerical_gradient_array(fg, gamma.copy(), dout)
+	db_num = eval_numerical_gradient_array(fb, beta.copy(), dout)
+
+	_, cache = batchnorm_forward(x, gamma, beta, bn_param)
+	dx, dgamma, dbeta = batchnorm_backward(dout, cache)
+	print('dx error: ', rel_error(dx_num, dx))
+	print('dgamma error: ', rel_error(da_num, dgamma))
+	print('dbeta error: ', rel_error(db_num, dbeta))
 
 
 class FullyConnectedNet(object):
@@ -91,6 +107,9 @@ class FullyConnectedNet(object):
 		for k, v in self.params.items():
 			self.params[k] = v.astype(dtype)
 
+	def train(self, ):
+		pass
+
 	def loss(self, X, y=None):
 		X = X.astype(self.dtype)
 		mode = 'test' if y is None else 'train'
@@ -105,18 +124,10 @@ class FullyConnectedNet(object):
 
 		out_hist = []
 		cache_hist = []
-		drop_cache_hist = []
 		# forward
 		out = X.copy()
 		for l in range(self.num_layers):
-			if l < (self.num_layers - 1):		
-				# dropout
-				if self.use_dropout:
-					temp_W, drop_cache = dropout_forward(self.params['W'+str(l+1)], self.dropout_param)
-					drop_cache_hist.append(drop_cache)
-				else:
-					temp_W = self.params['W'+str(l+1)]
-
+			if l < (self.num_layers - 1):	
 				out, cache = affine_relu_forward(out, self.params['W'+str(l+1)], self.params['b'+str(l+1)])
 				cache_hist.append(cache)
 			else:	
@@ -146,8 +157,6 @@ class FullyConnectedNet(object):
 				dx = np.dot(d_softmax, self.params['W'+str(l+1)].T)
 			else:
 				dx, dw, db = affine_relu_backward(dx, cache_hist[l])
-				if self.use_dropout:
-					dw = dropout_backward(dw, drop_cache_hist[l])
 				grads['b'+str(l+1)] = db
 				grads['W'+str(l+1)] = dw
 			
@@ -155,117 +164,7 @@ class FullyConnectedNet(object):
 
 		return loss, grads
 
-def dropout_cmp(train_images, train_labels):
-	np.random.seed(231)
-	num_train = 500
-	num_val = 10
-	small_data = {
-	  'X_train': train_images[:num_train],
-	  'y_train': train_labels[:num_train],
-	  'X_val': train_images[:num_val],
-	  'y_val': train_labels[:num_val],
-	}
 
-	solvers = {}
-	dropout_choices = [0, 0.75]
-	for dropout in dropout_choices:
-	  model = FullyConnectedNet([500], dropout=dropout)
-	  print(dropout)
-
-	  solver = Solver(model, small_data,
-	                  num_epochs=25, batch_size=100,
-	                  update_rule='adam',
-	                  optim_config={
-	                    'learning_rate': 5e-4,
-	                  },
-	                  verbose=True, print_every=100)
-	  solver.train()
-	  solvers[dropout] = solver
-
-	# Plot train and validation accuracies of the two models
-	train_accs = []
-	val_accs = []
-	for dropout in dropout_choices:
-	  solver = solvers[dropout]
-	  train_accs.append(solver.train_acc_history[-1])
-	  val_accs.append(solver.val_acc_history[-1])
-
-	plt.subplot(2, 1, 1)
-	for dropout in dropout_choices:
-	  plt.plot(solvers[dropout].train_acc_history, 'o', label='%.2f dropout' % dropout)
-	plt.title('Train accuracy')
-	plt.xlabel('Epoch')
-	plt.ylabel('Accuracy')
-	plt.legend(ncol=2, loc='lower right')
-	  
-	plt.subplot(2, 1, 2)
-	for dropout in dropout_choices:
-	  plt.plot(solvers[dropout].val_acc_history, 'o', label='%.2f dropout' % dropout)
-	plt.title('Val accuracy')
-	plt.xlabel('Epoch')
-	plt.ylabel('Accuracy')
-	plt.legend(ncol=2, loc='lower right')
-
-	plt.gcf().set_size_inches(15, 15)
-	plt.show()
-
-def update_cmp(train_images, train_labels):
-	num_val = 1000
-	num_train = -1
-	data = {
-	  'X_train': train_images[:num_train],
-	  'y_train': train_labels[:num_train],
-	  'X_val': train_images[:num_val],
-	  'y_val': train_labels[:num_val],
-	}
-
-	solvers = {}
-	learning_rates = {'sgd':1e-1, 'sgd_momentum':1e-1, 'rmsprop': 1e-4, 'adam': 1e-3}
-	update_rule_list = ['sgd', 'sgd_momentum', 'rmsprop', 'adam']
-	for update_rule in update_rule_list:
-		print('running with ', update_rule)
-		model = FullyConnectedNet([100, 50], \
-								  reg=5e-5, \
-								  weight_scale=5e-2)
-
-		solver = Solver(model, data, \
-	                  	num_epochs=20, batch_size=200, \
-	                  	update_rule=update_rule, \
-	                  	optim_config={
-	                   	 'learning_rate': learning_rates[update_rule]
-	                  	}, \
-	                  	verbose=True)
-		solvers[update_rule] = solver
-		solver.train()
-		print()
-
-	plt.subplot(3, 1, 1)
-	plt.title('Training loss')
-	plt.xlabel('Iteration')
-
-	plt.subplot(3, 1, 2)
-	plt.title('Training accuracy')
-	plt.xlabel('Epoch')
-
-	plt.subplot(3, 1, 3)
-	plt.title('Validation accuracy')
-	plt.xlabel('Epoch')
-
-	for update_rule, solver in list(solvers.items()):
-		plt.subplot(3, 1, 1)
-		plt.plot(solver.loss_history, 'o', label=update_rule)
-	  
-		plt.subplot(3, 1, 2)
-		plt.plot(solver.train_acc_history, '-o', label=update_rule)
-
-		plt.subplot(3, 1, 3)
-		plt.plot(solver.val_acc_history, '-o', label=update_rule)
-	  
-	for i in range(1, 4):
-		plt.subplot(3, 1, i)
-		plt.legend(loc='upper center', ncol=4)
-	plt.gcf().set_size_inches(15, 15)
-	plt.show()
 
 if __name__ == '__main__':
 	main()
