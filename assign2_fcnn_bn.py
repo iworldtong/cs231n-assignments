@@ -32,24 +32,88 @@ def main(data_set="cifar10"):
 		classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
 	np.random.seed(231)
-	N, D, H1, H2, C = 2, 15, 20, 30, 10
-	X = np.random.randn(N, D)
-	y = np.random.randint(C, size=(N,))
+	# Try training a very deep net with batchnorm
+	hidden_dims = [100, 100, 100, 100, 100]
 
-	for reg in [0, 3.14]:
-	  print('Running check with reg = ', reg)
-	  model = FullyConnectedNet([H1, H2], input_dim=D, num_classes=C,
-	                            reg=reg, weight_scale=5e-2, dtype=np.float64,
-	                            use_batchnorm=True)
+	num_train = 1000
+	num_val = 100
+	small_data = {
+	  'X_train': train_images[:num_train],
+	  'y_train': train_labels[:num_train],
+	  'X_val': train_images[:num_val],
+	  'y_val': train_labels[:num_val],
+	}
 
-	  loss, grads = model.loss(X, y)
-	  print('Initial loss: ', loss)
+	bn_solvers = {}
+	solvers = {}
+	weight_scales = np.logspace(-4, 0, num=20)
+	for i, weight_scale in enumerate(weight_scales):
+	  print('Running weight scale %d / %d' % (i + 1, len(weight_scales)))
+	  bn_model = FullyConnectedNet(hidden_dims, weight_scale=weight_scale, use_batchnorm=True)
+	  model = FullyConnectedNet(hidden_dims, weight_scale=weight_scale, use_batchnorm=False)
 
-	  for name in sorted(grads):
-	    f = lambda _: model.loss(X, y)[0]
-	    grad_num = eval_numerical_gradient(f, model.params[name], verbose=False, h=1e-5)
-	    print('%s relative error: %.2e' % (name, rel_error(grad_num, grads[name])))
-	  if reg == 0: print()
+	  bn_solver = Solver(bn_model, small_data,
+	                  num_epochs=10, batch_size=50,
+	                  update_rule='adam',
+	                  optim_config={
+	                    'learning_rate': 1e-3,
+	                  },
+	                  verbose=False, print_every=200)
+	  bn_solver.train()
+	  bn_solvers[weight_scale] = bn_solver
+
+	  solver = Solver(model, small_data,
+	                  num_epochs=10, batch_size=50,
+	                  update_rule='adam',
+	                  optim_config={
+	                    'learning_rate': 1e-3,
+	                  },
+	                  verbose=False, print_every=200)
+	  solver.train()
+	  solvers[weight_scale] = solver
+
+	  # Plot results of weight scale experiment
+	best_train_accs, bn_best_train_accs = [], []
+	best_val_accs, bn_best_val_accs = [], []
+	final_train_loss, bn_final_train_loss = [], []
+
+	for ws in weight_scales:
+	  best_train_accs.append(max(solvers[ws].train_acc_history))
+	  bn_best_train_accs.append(max(bn_solvers[ws].train_acc_history))
+	  
+	  best_val_accs.append(max(solvers[ws].val_acc_history))
+	  bn_best_val_accs.append(max(bn_solvers[ws].val_acc_history))
+	  
+	  final_train_loss.append(np.mean(solvers[ws].loss_history[-100:]))
+	  bn_final_train_loss.append(np.mean(bn_solvers[ws].loss_history[-100:]))
+	  
+	plt.subplot(3, 1, 1)
+	plt.title('Best val accuracy vs weight initialization scale')
+	plt.xlabel('Weight initialization scale')
+	plt.ylabel('Best val accuracy')
+	plt.semilogx(weight_scales, best_val_accs, '-o', label='baseline')
+	plt.semilogx(weight_scales, bn_best_val_accs, '-o', label='batchnorm')
+	plt.legend(ncol=2, loc='lower right')
+
+	plt.subplot(3, 1, 2)
+	plt.title('Best train accuracy vs weight initialization scale')
+	plt.xlabel('Weight initialization scale')
+	plt.ylabel('Best training accuracy')
+	plt.semilogx(weight_scales, best_train_accs, '-o', label='baseline')
+	plt.semilogx(weight_scales, bn_best_train_accs, '-o', label='batchnorm')
+	plt.legend()
+
+	plt.subplot(3, 1, 3)
+	plt.title('Final training loss vs weight initialization scale')
+	plt.xlabel('Weight initialization scale')
+	plt.ylabel('Final training loss')
+	plt.semilogx(weight_scales, final_train_loss, '-o', label='baseline')
+	plt.semilogx(weight_scales, bn_final_train_loss, '-o', label='batchnorm')
+	plt.legend()
+	plt.gca().set_ylim(1.0, 3.5)
+
+	plt.gcf().set_size_inches(10, 15)
+	plt.show()
 
 
 class FullyConnectedNet(object):
@@ -99,6 +163,9 @@ class FullyConnectedNet(object):
 		self.bn_params = []
 		if self.use_batchnorm:
 			self.bn_params = [{'mode': 'train'} for i in range(self.num_layers - 1)]
+			for l in range(self.num_layers-1):
+				self.params['gamma' + str(l+1)] = np.random.rand(self.dim_list[l+1])
+				self.params['beta'  + str(l+1)] = np.random.rand(self.dim_list[l+1])
 
 		# Cast all parameters to the correct datatype
 		for k, v in self.params.items():
@@ -118,19 +185,28 @@ class FullyConnectedNet(object):
 
 		out_hist = []
 		cache_hist = []
-		drop_cache_hist = []
 		# forward
 		out = X.copy()
 		for l in range(self.num_layers):
-			if l < (self.num_layers - 1):		
+			if l < (self.num_layers - 1):	
+				bn_cache, drop_cache = None, None
 				# dropout
 				if self.use_dropout:
 					temp_W, drop_cache = dropout_forward(self.params['W'+str(l+1)], self.dropout_param)
-					drop_cache_hist.append(drop_cache)
 				else:
 					temp_W = self.params['W'+str(l+1)]
+				
+				# affine
+				out, fc_cache = affine_forward(out, temp_W, self.params['b'+str(l+1)])
+				
+				# batch normalize
+				if self.use_batchnorm:
+					out, bn_cache = batchnorm_forward(out, self.params['gamma'+str(l+1)], self.params['beta'+str(l+1)], self.bn_params[l])
+				
+				# relu
+				out, relu_cache = relu_forward(out)
 
-				out, cache = affine_relu_forward(out, self.params['W'+str(l+1)], self.params['b'+str(l+1)])
+				cache = (drop_cache, fc_cache, bn_cache, relu_cache)
 				cache_hist.append(cache)
 			else:	
 				out = np.dot(out, self.params['W'+str(l+1)]) + self.params['b'+str(l+1)]
@@ -158,10 +234,24 @@ class FullyConnectedNet(object):
 				grads['W'+str(l+1)] = np.dot(out_hist[l-1].T, d_softmax)
 				dx = np.dot(d_softmax, self.params['W'+str(l+1)].T)
 			else:
-				dx, dw, db = affine_relu_backward(dx, cache_hist[l])
+				drop_cache, fc_cache, bn_cache, relu_cache = cache_hist[l]
+				
+				# relu backward
+				dx = relu_backward(dx, relu_cache)
+				
+				# batch normalize backward
+				if self.use_batchnorm:
+					dx, dgamma, dbeta = batchnorm_backward(dx, bn_cache)
+					grads['gamma'+str(l+1)] = dgamma
+					grads['beta'+str(l+1)] = dbeta
+				
+				# affine backward
+				dx, dw, db = affine_backward(dx, fc_cache)
+
+				# dropout backward
 				if self.use_dropout:
 					dw = dropout_backward(dw, drop_cache_hist[l])
-				
+
 				grads['b'+str(l+1)] = db
 				grads['W'+str(l+1)] = dw
 			
