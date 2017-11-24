@@ -31,28 +31,25 @@ def main(data_set="cifar10"):
 		test_labels = mnist.test.labels
 		classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
-	# Gradient check batchnorm backward pass
 	np.random.seed(231)
-	N, D = 4, 5
-	x = 5 * np.random.randn(N, D) + 12
-	gamma = np.random.randn(D)
-	beta = np.random.randn(D)
-	dout = np.random.randn(N, D)
+	N, D, H1, H2, C = 2, 15, 20, 30, 10
+	X = np.random.randn(N, D)
+	y = np.random.randint(C, size=(N,))
 
-	bn_param = {'mode': 'train'}
-	fx = lambda x: batchnorm_forward(x, gamma, beta, bn_param)[0]
-	fg = lambda a: batchnorm_forward(x, a, beta, bn_param)[0]
-	fb = lambda b: batchnorm_forward(x, gamma, b, bn_param)[0]
+	for reg in [0, 3.14]:
+	  print('Running check with reg = ', reg)
+	  model = FullyConnectedNet([H1, H2], input_dim=D, num_classes=C,
+	                            reg=reg, weight_scale=5e-2, dtype=np.float64,
+	                            use_batchnorm=True)
 
-	dx_num = eval_numerical_gradient_array(fx, x, dout)
-	da_num = eval_numerical_gradient_array(fg, gamma.copy(), dout)
-	db_num = eval_numerical_gradient_array(fb, beta.copy(), dout)
+	  loss, grads = model.loss(X, y)
+	  print('Initial loss: ', loss)
 
-	_, cache = batchnorm_forward(x, gamma, beta, bn_param)
-	dx, dgamma, dbeta = batchnorm_backward(dout, cache)
-	print('dx error: ', rel_error(dx_num, dx))
-	print('dgamma error: ', rel_error(da_num, dgamma))
-	print('dbeta error: ', rel_error(db_num, dbeta))
+	  for name in sorted(grads):
+	    f = lambda _: model.loss(X, y)[0]
+	    grad_num = eval_numerical_gradient(f, model.params[name], verbose=False, h=1e-5)
+	    print('%s relative error: %.2e' % (name, rel_error(grad_num, grads[name])))
+	  if reg == 0: print()
 
 
 class FullyConnectedNet(object):
@@ -107,9 +104,6 @@ class FullyConnectedNet(object):
 		for k, v in self.params.items():
 			self.params[k] = v.astype(dtype)
 
-	def train(self, ):
-		pass
-
 	def loss(self, X, y=None):
 		X = X.astype(self.dtype)
 		mode = 'test' if y is None else 'train'
@@ -124,10 +118,18 @@ class FullyConnectedNet(object):
 
 		out_hist = []
 		cache_hist = []
+		drop_cache_hist = []
 		# forward
 		out = X.copy()
 		for l in range(self.num_layers):
-			if l < (self.num_layers - 1):	
+			if l < (self.num_layers - 1):		
+				# dropout
+				if self.use_dropout:
+					temp_W, drop_cache = dropout_forward(self.params['W'+str(l+1)], self.dropout_param)
+					drop_cache_hist.append(drop_cache)
+				else:
+					temp_W = self.params['W'+str(l+1)]
+
 				out, cache = affine_relu_forward(out, self.params['W'+str(l+1)], self.params['b'+str(l+1)])
 				cache_hist.append(cache)
 			else:	
@@ -157,6 +159,9 @@ class FullyConnectedNet(object):
 				dx = np.dot(d_softmax, self.params['W'+str(l+1)].T)
 			else:
 				dx, dw, db = affine_relu_backward(dx, cache_hist[l])
+				if self.use_dropout:
+					dw = dropout_backward(dw, drop_cache_hist[l])
+				
 				grads['b'+str(l+1)] = db
 				grads['W'+str(l+1)] = dw
 			

@@ -117,7 +117,7 @@ class FullyConnectedNet(object):
 				else:
 					temp_W = self.params['W'+str(l+1)]
 
-				out, cache = affine_relu_forward(out, self.params['W'+str(l+1)], self.params['b'+str(l+1)])
+				out, cache = affine_relu_forward(out, temp_W, self.params['b'+str(l+1)])
 				cache_hist.append(cache)
 			else:	
 				out = np.dot(out, self.params['W'+str(l+1)]) + self.params['b'+str(l+1)]
@@ -157,8 +157,8 @@ class FullyConnectedNet(object):
 
 def dropout_cmp(train_images, train_labels):
 	np.random.seed(231)
-	num_train = 500
-	num_val = 10
+	num_train = 1000
+	num_val = 50
 	small_data = {
 	  'X_train': train_images[:num_train],
 	  'y_train': train_labels[:num_train],
@@ -167,7 +167,7 @@ def dropout_cmp(train_images, train_labels):
 	}
 
 	solvers = {}
-	dropout_choices = [0, 0.75]
+	dropout_choices = [0, 0.25, 0.5, 0.75]
 	for dropout in dropout_choices:
 	  model = FullyConnectedNet([500], dropout=dropout)
 	  print(dropout)
@@ -192,7 +192,7 @@ def dropout_cmp(train_images, train_labels):
 
 	plt.subplot(2, 1, 1)
 	for dropout in dropout_choices:
-	  plt.plot(solvers[dropout].train_acc_history, 'o', label='%.2f dropout' % dropout)
+	  plt.plot(solvers[dropout].train_acc_history, '-o', label='%.2f dropout' % dropout)
 	plt.title('Train accuracy')
 	plt.xlabel('Epoch')
 	plt.ylabel('Accuracy')
@@ -200,7 +200,7 @@ def dropout_cmp(train_images, train_labels):
 	  
 	plt.subplot(2, 1, 2)
 	for dropout in dropout_choices:
-	  plt.plot(solvers[dropout].val_acc_history, 'o', label='%.2f dropout' % dropout)
+	  plt.plot(solvers[dropout].val_acc_history, '-o', label='%.2f dropout' % dropout)
 	plt.title('Val accuracy')
 	plt.xlabel('Epoch')
 	plt.ylabel('Accuracy')

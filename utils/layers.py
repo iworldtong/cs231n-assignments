@@ -147,10 +147,11 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         x_mean = np.mean(x, 0)
         x_var = np.var(x, 0)
         x_hat = (x - x_mean) / np.sqrt(x_var + eps)
-        out = x_hat * gamma + beta
+        #x_hat = (x - x_mean) #/ np.sqrt(x_var + eps)
+        out = x_hat * gamma + beta        
 
-        running_mean =  momentum * running_mean + (1 - momentum) * np.mean(x, 0)
-        running_var = momentum * running_var + (1 - momentum) * np.var(x, 0)
+        running_mean =  momentum * running_mean + (1 - momentum) * x_mean
+        running_var = momentum * running_var + (1 - momentum) * x_var
        
         cache = (x, x_hat, x_mean, x_var, eps, gamma, beta)
 
@@ -191,15 +192,14 @@ def batchnorm_backward(dout, cache):
     - dbeta: Gradient with respect to shift parameter beta, of shape (D,)
     """
     x, x_hat, x_mean, x_var, eps, gamma, beta = cache
-    N = x.shape[0]
 
-    t1 = np.ones_like(x)
-    t1 *= (N - 1) * np.sqrt(x_var + eps)
-    t2 = (x - x_mean) * 2 * np.std(x) 
-    t3 = t1 - t2
-    dx = t3 / (N * (x_var + eps))
-
-    dx *= dout * gamma
+    N = dout.shape[0]
+    dx_hat = dout * gamma
+    dvar = (dx_hat * (x-x_mean) * (-0.5) * np.power(x_var+eps, -1.5)).sum(axis = 0)
+    dmean = np.sum(dx_hat * (-1) * np.power(x_var + eps, -0.5), axis = 0)
+    dmean += dvar * np.sum(-2 * (x - x_mean), axis = 0) / N
+    
+    dx = dx_hat * np.power(x_var + eps, -0.5) + dvar*2*(x - x_mean) / N + dmean / N
     dgamma = np.sum(dout * x_hat, 0)
     dbeta  = np.sum(dout, 0)
 
@@ -219,19 +219,22 @@ def batchnorm_backward_alt(dout, cache):
 
     Inputs / outputs: Same as batchnorm_backward
     """
-    dx, dgamma, dbeta = None, None, None
     ###########################################################################
-    # TODO: Implement the backward pass for batch normalization. Store the    #
-    # results in the dx, dgamma, and dbeta variables.                         #
-    #                                                                         #
     # After computing the gradient with respect to the centered inputs, you   #
     # should be able to compute gradients with respect to the inputs in a     #
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
-    pass
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
+    x, x_hat, x_mean, x_var, eps, gamma, beta = cache
+    
+    N = dout.shape[0]
+    dx_hat = dout * gamma
+    dvar = (dx_hat * (x-x_mean) * (-0.5) * np.power(x_var+eps, -1.5)).sum(axis = 0)
+    dmean = np.sum(dx_hat * (-1) * np.power(x_var + eps, -0.5), axis = 0)
+    dmean += dvar * np.sum(-2 * (x - x_mean), axis = 0) / N
+    
+    dx = dx_hat * np.power(x_var + eps, -0.5) + dvar*2*(x - x_mean) / N + dmean / N
+    dgamma = np.sum(dout * x_hat, 0)
+    dbeta  = np.sum(dout, 0)
 
     return dx, dgamma, dbeta
 
