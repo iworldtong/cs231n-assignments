@@ -317,15 +317,25 @@ def conv_forward_naive(x, w, b, conv_param):
       W' = 1 + (W + 2 * pad - WW) / stride
     - cache: (x, w, b, conv_param)
     """
-    out = None
-    ###########################################################################
-    # TODO: Implement the convolutional forward pass.                         #
-    # Hint: you can use the function np.pad for padding.                      #
-    ###########################################################################
-    pass
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
+    pad = int(conv_param['pad'])
+    stride = int(conv_param['stride'])
+    
+    # convolutional forward pass.     
+    # use np.pad for padding.
+    x_pad = np.pad(x, ((0, 0), (0, 0), (pad,pad), (pad,pad)), 'constant', constant_values=0)
+    N, H, W = x_pad.shape[0], x_pad.shape[2], x_pad.shape[3]
+    F, HH, WW = w.shape[0], w.shape[2], w.shape[3]
+    # find all the anchor of x will be conved by w
+    h_list = [i for i in range(0, H, stride) if (H-i) // HH >= 1]
+    w_list = [i for i in range(0, W, stride) if (W-i) // WW >= 1]
+    
+    out = np.zeros((N, F, len(h_list), len(w_list)))
+    for n in range(N):
+        for f in range(F):
+            for h_index, h_ in enumerate(h_list):
+                for w_index, w_ in enumerate(w_list):
+                    out[n, f, h_index, w_index] = np.sum(x_pad[n, :, h_:h_+HH, w_:w_+WW] * w[f]) + b[f]
+
     cache = (x, w, b, conv_param)
     return out, cache
 
@@ -343,14 +353,29 @@ def conv_backward_naive(dout, cache):
     - dw: Gradient with respect to w
     - db: Gradient with respect to b
     """
-    dx, dw, db = None, None, None
-    ###########################################################################
-    # TODO: Implement the convolutional backward pass.                        #
-    ###########################################################################
-    pass
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
+    x, w, b, conv_param = cache
+    pad = int(conv_param['pad'])
+    stride = int(conv_param['stride'])
+    x_pad = np.pad(x, ((0, 0), (0, 0), (pad,pad), (pad,pad)), 'constant', constant_values=0)
+    N, C, H, W = x_pad.shape[0], x_pad.shape[1], x_pad.shape[2], x_pad.shape[3]
+    F, HH, WW = w.shape[0], w.shape[2], w.shape[3]
+    h_list = [i for i in range(0, H, stride) if (H-i) // HH >= 1]
+    w_list = [i for i in range(0, W, stride) if (W-i) // WW >= 1]
+
+    # Implement the convolutional backward pass.
+    dx = np.zeros_like(x)
+    dx_pad = np.zeros_like(x_pad)
+    dw = np.zeros_like(w)
+
+    for f in range(F):
+        for h_index, h_ in enumerate(h_list):
+            for w_index, w_ in enumerate(w_list):
+                for n in range(N):
+                    dx_pad[n, :, h_:h_+HH, w_:w_+WW] += dout[n, f, h_index, w_index] * w[f, :, :, :]
+                    dw[f, :, :, :] += dout[n, f, h_index, w_index] * x_pad[n, :, h_:h_+HH, w_:w_+WW]
+    dx = dx_pad[:, :, pad:-pad, pad:-pad]
+    db = np.sum(dout, axis=(0, 2, 3)) 
+    
     return dx, dw, db
 
 
@@ -369,14 +394,19 @@ def max_pool_forward_naive(x, pool_param):
     - out: Output data
     - cache: (x, pool_param)
     """
-    out = None
-    ###########################################################################
-    # TODO: Implement the max pooling forward pass                            #
-    ###########################################################################
-    pass
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
+    stride = int(pool_param['stride'])
+    pool_width = int(pool_param['pool_width'])
+    pool_height = int(pool_param['pool_height'])
+    N, C, H, W = x.shape
+    h_list = [i for i in range(0, H, stride) if (H-i) // pool_height >= 1]
+    w_list = [i for i in range(0, W, stride) if (W-i) // pool_width >= 1]
+
+    # the max pooling forward pass
+    out = np.zeros((N, C, len(h_list), len(w_list)))
+    for h_index, h_ in enumerate(h_list):
+        for w_index, w_ in enumerate(w_list):
+            out[:, :, h_index, w_index] = np.max(x[:, :, h_:h_+pool_height, w_:w_+pool_width], axis=(2,3))
+
     cache = (x, pool_param)
     return out, cache
 
@@ -392,14 +422,22 @@ def max_pool_backward_naive(dout, cache):
     Returns:
     - dx: Gradient with respect to x
     """
-    dx = None
-    ###########################################################################
-    # TODO: Implement the max pooling backward pass                           #
-    ###########################################################################
-    pass
-    ###########################################################################
-    #                             END OF YOUR CODE                            #
-    ###########################################################################
+    x, pool_param = cache
+    stride = int(pool_param['stride'])
+    pool_width = int(pool_param['pool_width'])
+    pool_height = int(pool_param['pool_height'])
+    N, C, H, W = x.shape
+    h_list = [i for i in range(0, H, stride) if (H-i) // pool_height >= 1]
+    w_list = [i for i in range(0, W, stride) if (W-i) // pool_width >= 1]
+
+    # the max pooling backward pass                               
+    dx = np.zeros_like(x)
+    for h_index, h_ in enumerate(h_list):
+        for w_index, w_ in enumerate(w_list):
+            for n in range(N):
+                for c in range(C):
+                    row, cul = divmod(np.argmax(x[n, c, h_:h_+pool_height, w_:w_+pool_width]), pool_width)
+                    dx[n, c, h_+row, w_+cul] = dout[n, c, h_index, w_index]
     return dx
 
 
