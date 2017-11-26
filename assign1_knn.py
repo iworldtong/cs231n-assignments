@@ -25,7 +25,7 @@ def main():
 	k_list = [1, 3, 6]
 
 	# load cifar10 data set
-	train_images, train_labels, test_images, test_labels = cfg.load_cifar10()
+	train_images, train_labels, val_images, val_labels, test_images, test_labels = cfg.load_cifar10()		
 	classes = cfg.CIFAR10_classes
 	num_classes = len(classes)
 

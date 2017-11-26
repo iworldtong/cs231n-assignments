@@ -8,46 +8,15 @@ import utils.gradient_check as grad_ck
 def main():
 
 	# load cifar10 data set
-	train_images, train_labels, test_images, test_labels = cfg.load_cifar10()
-	train_images = train_images.astype(float)
-	test_images = test_images.astype(float)
+	train_images, train_labels, val_images, val_labels, test_images, test_labels = cfg.load_cifar10()	
 	classes = cfg.CIFAR10_classes
 	num_classes = len(classes)
-
-	# Split the data into train, train_dev, val, and test sets
-	num_train = 49000
-	num_val   = 1000
-	num_test  = 1000
-	num_dev   = 1
-
-	# get val set
-	mask = list(range(num_train, num_train + num_val))
-	val_images = train_images[mask]
-	val_labels = train_labels[mask]
-
-	# make a development set, which is a small subset of the training set
-	mask = np.random.choice(num_train, num_dev, replace=False)
-	dev_images = train_images[mask]
-	dev_labels = train_labels[mask]
-
-	# get test set
-	mask = list(range(num_test))
-	test_images = test_images[mask]
-	test_labels = test_labels[mask]
-
-	# zero mean
-	mean_train_image = np.mean(train_images, axis=0)
-	train_images -= mean_train_image
-	val_images -= mean_train_image
-	dev_images -= mean_train_image
-	test_images -= mean_train_image
 
 	# bias trick : append the bias dimension of ones
 	train_images = np.hstack([train_images, np.ones((train_images.shape[0], 1))])
 	val_images = np.hstack([val_images, np.ones((val_images.shape[0], 1))])
-	dev_images = np.hstack([dev_images, np.ones((dev_images.shape[0], 1))])
 	test_images = np.hstack([test_images, np.ones((test_images.shape[0], 1))])
-	
+
 	# Softmax Classifier
 	classifier = softmax()
 

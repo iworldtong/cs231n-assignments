@@ -33,12 +33,8 @@ def main(data_set="cifar10"):
 
 	if data_set == "cifar10":
 		# load cifar10 data set
-		train_images, train_labels, test_images, test_labels = cfg.load_cifar10()
-		train_images = train_images.astype(np.float64)
-		test_images = test_images.astype(np.float64)
+		train_images, train_labels, val_images, val_labels, test_images, test_labels = cfg.load_cifar10()		
 		classes = cfg.CIFAR10_classes
-		train_images /= 255.
-		test_images /= 255.
 	elif data_set == "mnist":
 		mnist = input_data.read_data_sets(cfg.MNIST_PATH)
 		train_images = mnist.train.images
@@ -47,26 +43,35 @@ def main(data_set="cifar10"):
 		test_labels = mnist.test.labels
 		classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
-
+	train_images = train_images.reshape(-1, 3, 32, 32)
+	val_images = val_images.reshape(-1, 3, 32, 32)
+	test_images = test_images.reshape(-1, 3, 32, 32)
 
 	np.random.seed(231)
-	x = np.random.randn(2, 3, 8, 8)
-	w = np.random.randn(3, 3, 3, 3)
-	b = np.random.randn(3,)
-	dout = np.random.randn(2, 3, 8, 8)
-	conv_param = {'stride': 1, 'pad': 1}
 
-	out, cache = conv_relu_forward(x, w, b, conv_param)
-	dx, dw, db = conv_relu_backward(dout, cache)
+	data = {
+	  'X_train': train_images,
+	  'y_train': train_labels,
+	  'X_val': val_images,
+	  'y_val': val_labels,
+	}
 
-	dx_num = eval_numerical_gradient_array(lambda x: conv_relu_forward(x, w, b, conv_param)[0], x, dout)
-	dw_num = eval_numerical_gradient_array(lambda w: conv_relu_forward(x, w, b, conv_param)[0], w, dout)
-	db_num = eval_numerical_gradient_array(lambda b: conv_relu_forward(x, w, b, conv_param)[0], b, dout)
+	model = ThreeLayerConvNet(weight_scale=0.001, hidden_dim=500, reg=0.001)
 
-	print('Testing conv_relu:')
-	print('dx error: ', rel_error(dx_num, dx))
-	print('dw error: ', rel_error(dw_num, dw))
-	print('db error: ', rel_error(db_num, db))
+	solver = Solver(model, data,
+	                num_epochs=1, batch_size=50,
+	                update_rule='adam',
+	                optim_config={
+	                  'learning_rate': 1e-3,
+	                },
+	                verbose=True, print_every=20)
+	solver.train()
+
+	grid = visualize_grid(model.params['W1'].transpose(0, 2, 3, 1))
+	plt.imshow(grid.astype('uint8'))
+	plt.axis('off')
+	plt.gcf().set_size_inches(5, 5)
+	plt.show()
 
 
 class ThreeLayerConvNet(object):
@@ -104,12 +109,17 @@ class ThreeLayerConvNet(object):
 		# Store weights and biases for the convolutional layer using the keys 'W1' 
 		# and 'b1'; use keys 'W2' and 'b2' for the weights and biases of the       
 		# hidden affine layer, and keys 'W3' and 'b3' for the weights and biases   
-		# of the output affine layer.                                              
-		pass
+		# of the output affine layer.                                            
+		self.params['W1'] = weight_scale * np.random.randn(num_filters, input_dim[0], filter_size, filter_size)
+		self.params['b1'] = np.zeros(num_filters)
+		self.flatten_dim  = num_filters * np.power(((input_dim[-1] - 1) // 2 + 1), 2)
+		self.params['W2'] = weight_scale * np.random.randn(self.flatten_dim, hidden_dim)
+		self.params['b2'] = np.zeros(hidden_dim)
+		self.params['W3'] = weight_scale * np.random.randn(hidden_dim, num_classes)
+		self.params['b3'] = np.zeros(num_classes)
 
 		for k, v in self.params.items():
 			self.params[k] = v.astype(dtype)
-
 
 	def loss(self, X, y=None):
 		"""
@@ -126,23 +136,45 @@ class ThreeLayerConvNet(object):
 		# pass pool_param to the forward pass for the max-pooling layer
 		pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
 
-		scores = None
 		
+		cache_hist = []
+		out_hist = []
 		# forward pass 
 
-		pass
+		# conv - relu - 2x2 max pool
+		out, cache = conv_relu_pool_forward(X, W1, b1, conv_param, pool_param)
+		cache_hist.append(cache)
+		out_hist.append(out)
+		
+		# affine - relu
+		#out = out.reshape(X.shape[0], self.flatten_dim)
+		out, cache = affine_relu_forward(out, W2, b2)
+		cache_hist.append(cache)
+		out_hist.append(out)
+		
+		# affine - softmax
+		out, cache = affine_forward(out, W3, b3)
+		out_shift = np.exp(out - np.max(out, axis=1, keepdims=True))
+		scores = out_shift / np.sum(out_shift, axis=1, keepdims=True)
 
 		if y is None:
 			return scores
 
-		loss, grads = 0, {}
-		# The backward pass for the three-layer convolutional net. 
-		# Don't forget to add L2 regularization!
+		# calc loss with L2
+		loss, dout = softmax_loss(out, y)
+		loss = loss + 0.5 * self.reg * (np.sum(W1**2) + np.sum(W2**2)+ np.sum(W3**2))
+		
+		# calc gradiants
+		grads = {}
+		dout, grads['W3'], grads['b3'] = affine_backward(dout, cache)
+		dout, grads['W2'], grads['b2'] = affine_relu_backward(dout, cache_hist[1])
+		dout, grads['W1'], grads['b1'] = conv_relu_pool_backward(dout, cache_hist[0])
 
-		pass
+		grads['W3'] += self.reg * W3
+		grads['W2'] += self.reg * W2
+		grads['W1'] += self.reg * W1
 
 		return loss, grads
-
 
 
 if __name__ == '__main__':

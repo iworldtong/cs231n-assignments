@@ -17,12 +17,8 @@ def rel_error(x, y):
 def main(data_set="cifar10"):
 	if data_set == "cifar10":
 		# load cifar10 data set
-		train_images, train_labels, test_images, test_labels = cfg.load_cifar10()
-		train_images = train_images.astype(np.float64)
-		test_images = test_images.astype(np.float64)
+		train_images, train_labels, val_images, val_labels, test_images, test_labels = cfg.load_cifar10()		
 		classes = cfg.CIFAR10_classes
-		train_images /= 255.
-		test_images /= 255.
 	elif data_set == "mnist":
 		mnist = input_data.read_data_sets(cfg.MNIST_PATH)
 		train_images = mnist.train.images
@@ -36,12 +32,11 @@ def main(data_set="cifar10"):
 	hidden_dims = [100, 100, 100, 100, 100]
 
 	num_train = 1000
-	num_val = 100
 	small_data = {
 	  'X_train': train_images[:num_train],
 	  'y_train': train_labels[:num_train],
-	  'X_val': train_images[:num_val],
-	  'y_val': train_labels[:num_val],
+	  'X_val': val_images,
+	  'y_val': val_labels,
 	}
 
 	bn_solvers = {}

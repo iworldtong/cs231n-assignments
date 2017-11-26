@@ -18,12 +18,8 @@ def rel_error(x, y):
 def main(data_set="cifar10"):
 	if data_set == "cifar10":
 		# load cifar10 data set
-		train_images, train_labels, test_images, test_labels = cfg.load_cifar10()
-		train_images = train_images.astype(np.float64)
-		test_images = test_images.astype(np.float64)
+		train_images, train_labels, val_images, val_labels, test_images, test_labels = cfg.load_cifar10()		
 		classes = cfg.CIFAR10_classes
-		train_images /= 255.
-		test_images /= 255.
 	elif data_set == "mnist":
 		mnist = input_data.read_data_sets(cfg.MNIST_PATH)
 		train_images = mnist.train.images
@@ -32,10 +28,25 @@ def main(data_set="cifar10"):
 		test_labels = mnist.test.labels
 		classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 	
+	np.random.seed(231)
 
-	dropout_cmp(train_images, train_labels)
+	small_data = {
+	  'X_train': train_images[:1000],
+	  'y_train': train_labels[:1000],
+	  'X_val': val_images,
+	  'y_val': val_labels,
+	}
+
+	data = {
+	  'X_train': train_images,
+	  'y_train': train_labels,
+	  'X_val': val_images,
+	  'y_val': val_labels,
+	}
+
+	dropout_cmp(small_data)
 	
-	#update_cmp(train_images, train_labels)
+	#update_cmp(data)
 
 
 
@@ -155,24 +166,14 @@ class FullyConnectedNet(object):
 
 		return loss, grads
 
-def dropout_cmp(train_images, train_labels):
-	np.random.seed(231)
-	num_train = 1000
-	num_val = 50
-	small_data = {
-	  'X_train': train_images[:num_train],
-	  'y_train': train_labels[:num_train],
-	  'X_val': train_images[:num_val],
-	  'y_val': train_labels[:num_val],
-	}
-
+def dropout_cmp(data):
 	solvers = {}
 	dropout_choices = [0, 0.25, 0.5, 0.75]
 	for dropout in dropout_choices:
 	  model = FullyConnectedNet([500], dropout=dropout)
 	  print(dropout)
 
-	  solver = Solver(model, small_data,
+	  solver = Solver(model, data,
 	                  num_epochs=25, batch_size=100,
 	                  update_rule='adam',
 	                  optim_config={
@@ -209,16 +210,7 @@ def dropout_cmp(train_images, train_labels):
 	plt.gcf().set_size_inches(15, 15)
 	plt.show()
 
-def update_cmp(train_images, train_labels):
-	num_val = 1000
-	num_train = -1
-	data = {
-	  'X_train': train_images[:num_train],
-	  'y_train': train_labels[:num_train],
-	  'X_val': train_images[:num_val],
-	  'y_val': train_labels[:num_val],
-	}
-
+def update_cmp(data):
 	solvers = {}
 	learning_rates = {'sgd':1e-1, 'sgd_momentum':1e-1, 'rmsprop': 1e-4, 'adam': 1e-3}
 	update_rule_list = ['sgd', 'sgd_momentum', 'rmsprop', 'adam']
