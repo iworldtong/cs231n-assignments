@@ -13,6 +13,6 @@
 
 * [Assignment 1](https://iworldtong.github.io/2017/11/17/cs231n%E4%BD%9C%E4%B8%9A1%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BB%A3%E7%A0%81/)
 * [Assignment 2](http://www.iworldtong.com/2017/11/21/cs231n%E4%BD%9C%E4%B8%9A2%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BB%A3%E7%A0%81/)
-* [Assignment 3]()
+* [Assignment 3](http://www.iworldtong.com/2017/11/28/cs231n%E4%BD%9C%E4%B8%9A3%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BB%A3%E7%A0%81/#more)
 
 
