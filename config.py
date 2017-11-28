@@ -1,14 +1,21 @@
-import os
+import os, json
 import pickle
 import numpy as np
+import h5py
 
 
-DATA_PATH = "./data"
+
+
+MODEL_PATH = "./model"
+DATA_PATH = "E:/cs231n/data"
 MNIST_PATH = os.path.join(DATA_PATH, "mnist")
 CIFAR10_PATH = os.path.join(DATA_PATH, "cifar-10-batches-py")
 
 CIFAR10_classes = ['airplane', 'automobile', 'bird', 'cat', 'deer', \
 				   'dog', 'frog', 'horse', 'ship', 'truck' ]
+
+COCO_BASE_DIR = os.path.join(DATA_PATH, "coco_captioning") 
+
 
 
 def unpickle(file):
@@ -64,12 +71,104 @@ def load_cifar10():
 		   test_images,  test_labels
 
 
+
+def load_coco_data(base_dir=COCO_BASE_DIR,
+                   max_train=None,
+                   pca_features=True):
+    data = {}
+    caption_file = os.path.join(base_dir, 'coco2014_captions.h5')
+    with h5py.File(caption_file, 'r') as f:
+        for k, v in f.items():
+            data[k] = np.asarray(v)
+
+    if pca_features:
+        train_feat_file = os.path.join(base_dir, 'train2014_vgg16_fc7_pca.h5')
+    else:
+        train_feat_file = os.path.join(base_dir, 'train2014_vgg16_fc7.h5')
+    with h5py.File(train_feat_file, 'r') as f:
+        data['train_features'] = np.asarray(f['features'])
+
+    if pca_features:
+        val_feat_file = os.path.join(base_dir, 'val2014_vgg16_fc7_pca.h5')
+    else:
+        val_feat_file = os.path.join(base_dir, 'val2014_vgg16_fc7.h5')
+    with h5py.File(val_feat_file, 'r') as f:
+        data['val_features'] = np.asarray(f['features'])
+
+    dict_file = os.path.join(base_dir, 'coco2014_vocab.json')
+    with open(dict_file, 'r') as f:
+        dict_data = json.load(f)
+        for k, v in dict_data.items():
+            data[k] = v
+
+    train_url_file = os.path.join(base_dir, 'train2014_urls.txt')
+    with open(train_url_file, 'r') as f:
+        train_urls = np.asarray([line.strip() for line in f])
+    data['train_urls'] = train_urls
+
+    val_url_file = os.path.join(base_dir, 'val2014_urls.txt')
+    with open(val_url_file, 'r') as f:
+        val_urls = np.asarray([line.strip() for line in f])
+    data['val_urls'] = val_urls
+
+    # Maybe subsample the training data
+    if max_train is not None:
+        num_train = data['train_captions'].shape[0]
+        mask = np.random.randint(num_train, size=max_train)
+        data['train_captions'] = data['train_captions'][mask]
+        data['train_image_idxs'] = data['train_image_idxs'][mask]
+
+    return data
+
+
+def decode_captions(captions, idx_to_word):
+    singleton = False
+    if captions.ndim == 1:
+        singleton = True
+        captions = captions[None]
+    decoded = []
+    N, T = captions.shape
+    for i in range(N):
+        words = []
+        for t in range(T):
+            word = idx_to_word[captions[i, t]]
+            if word != '<NULL>':
+                words.append(word)
+            if word == '<END>':
+                break
+        decoded.append(' '.join(words))
+    if singleton:
+        decoded = decoded[0]
+    return decoded
+
+
+def sample_coco_minibatch(data, batch_size=100, split='train'):
+    split_size = data['%s_captions' % split].shape[0]
+    mask = np.random.choice(split_size, batch_size)
+    captions = data['%s_captions' % split][mask]
+    image_idxs = data['%s_image_idxs' % split][mask]
+    image_features = data['%s_features' % split][image_idxs]
+    urls = data['%s_urls' % split][image_idxs]
+    return captions, image_features, urls
+
+
+
 if __name__ == '__main__':
 	train_images, train_labels, val_images, val_labels, test_images, test_labels = load_cifar10()
 
+	print('cifar-10 : ')
 	print('Training data shape: ', train_images.shape)
 	print('Training labels shape: ', train_labels.shape)
 	print('Validation data shape: ', val_images.shape)
 	print('Validation labels shape: ', val_labels.shape)
 	print('Test data shape: ', test_images.shape)
 	print('Test labels shape: ', test_labels.shape)
+
+
+	data = load_coco_data(pca_features=True)
+	print('COCO : ')
+	for k, v in data.items(): 
+		if type(v) == np.ndarray:
+			print(k, type(v), v.shape, v.dtype)
+		else:
+			print(k, type(v), len(v))
