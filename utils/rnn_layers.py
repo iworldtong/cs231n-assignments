@@ -163,8 +163,7 @@ def word_embedding_forward(x, W):
     #                                                                            #
     # HINT: This can be done in one line using NumPy's array indexing.           #
     ##############################################################################
-    N, T, D = *x.shape, W.shape[1]
-    out = np.zeros((N, T, D))
+    out = np.zeros((*x.shape, W.shape[1]))
     out[:,:] = W[x]
     cache = (x, W)
     return out, cache

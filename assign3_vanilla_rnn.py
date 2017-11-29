@@ -18,13 +18,39 @@ def main():
 
 
 
+	small_data = cfg.load_coco_data(max_train=50)
 
+	small_rnn_model = vanilla_rnn(
+	          cell_type='rnn',
+	          word_to_idx=data['word_to_idx'],
+	          input_dim=data['train_features'].shape[1],
+	          hidden_dim=512,
+	          wordvec_dim=256,
+	        )
+
+
+	small_rnn_solver = CaptioningSolver(small_rnn_model, small_data,
+           update_rule='adam',
+           num_epochs=100,
+           batch_size=25,
+           optim_config={
+             'learning_rate': 5e-3,
+           },
+           lr_decay=0.95,
+           verbose=True, print_every=10,
+         )
+
+	small_rnn_solver.train()
+
+	# Test your overfitted model on both training and validation data :
+	# 	the samples on training data should be very good;
+	# 	the samples on validation data probably won't make sense.
 	for split in ['train', 'val']:
 	    minibatch = cfg.sample_coco_minibatch(small_data, split=split, batch_size=2)
 	    gt_captions, features, urls = minibatch
 	    gt_captions = cfg.decode_captions(gt_captions, data['idx_to_word'])
 
-	    sample_captions = small_rnn_model.sample(features)
+	    sample_captions = small_rnn_model.sample(features, max_length=10)
 	    sample_captions = cfg.decode_captions(sample_captions, data['idx_to_word'])
 
 	    for gt_caption, sample_caption, url in zip(gt_captions, sample_captions, urls):
@@ -32,7 +58,6 @@ def main():
 	        plt.title('%s\n%s\nGT:%s' % (split, sample_caption, gt_caption))
 	        plt.axis('off')
 	        plt.show()
-
 
 
 
@@ -149,7 +174,7 @@ class vanilla_rnn(object):
 		# Weight and bias for the affine transform from image features to initial
 		# hidden state
 		W_proj, b_proj = self.params['W_proj'], self.params['b_proj']
-		hidden_state = np.dot(features, W_proj) + b_proj
+		h0 = np.dot(features, W_proj) + b_proj
 
 		# Word embedding matrix
 		W_embed = self.params['W_embed']
@@ -158,7 +183,7 @@ class vanilla_rnn(object):
 		# Input-to-hidden, hidden-to-hidden, and biases for the RNN
 		Wx, Wh, b = self.params['Wx'], self.params['Wh'], self.params['b']
 		if self.cell_type == 'rnn':
-			rnn_out, rnn_cache = rnn_forward(word_embedding_out, hidden_state, Wx, Wh, b)
+			rnn_out, rnn_cache = rnn_forward(word_embedding_out, h0, Wx, Wh, b)
 
 		# Weight and bias for the hidden-to-vocab transformation.
 		N, T, H = rnn_out.shape
@@ -234,7 +259,16 @@ class vanilla_rnn(object):
 		# functions; you'll need to call rnn_step_forward or lstm_step_forward in #
 		# a loop.                                                                 #
 		###########################################################################
-		pass
+		current_h, _ = affine_forward(features, W_proj, b_proj)
+		captions[:, 0] = self._start
+
+		for t in range(1, max_length):
+			if self.cell_type == 'rnn':
+				current_x, _ = word_embedding_forward(captions[:, t], W_embed)
+				current_h, _ = rnn_step_forward(current_x, current_h, Wx, Wh, b)
+				out, _ = affine_forward(current_h, W_vocab, b_vocab)
+				captions[:, t] = np.argmax(out, axis=1)
+
 		return captions
 		
 
