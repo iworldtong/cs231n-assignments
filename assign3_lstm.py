@@ -42,10 +42,10 @@ def overfit_traning_set():
 	for split in ['train', 'val']:
 		minibatch = cfg.sample_coco_minibatch(small_data, split=split, batch_size=2)
 		gt_captions, features, urls = minibatch
-		gt_captions = cfg.decode_captions(gt_captions, data['idx_to_word'])
+		gt_captions = cfg.decode_captions(gt_captions, small_data['idx_to_word'])
 
 		sample_captions = small_lstm_model.sample(features, max_length=15)
-		sample_captions = cfg.decode_captions(sample_captions, data['idx_to_word'])
+		sample_captions = cfg.decode_captions(sample_captions, small_data['idx_to_word'])
 
 		for gt_caption, sample_caption, url in zip(gt_captions, sample_captions, urls):
 			plt.imshow(image_from_url(url))
