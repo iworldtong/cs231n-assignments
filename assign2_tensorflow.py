@@ -24,15 +24,12 @@ def main(data_set="cifar10"):
 		test_labels = mnist.test.labels
 		classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
+
 	# init network
 	net = model(input_dim=(32, 32, 3))
 
-	# define loss
-	total_loss = tf.losses.softmax_cross_entropy(onehot_labels=tf.one_hot(net.y, 10), logits=net.logits)
-	mean_loss = tf.reduce_mean(total_loss)
-
 	# define optimizer
-	optimizer = tf.train.AdamOptimizer(5e-4).minimize(mean_loss)
+	optimizer = tf.train.AdamOptimizer(5e-3).minimize(net.loss)
 
 	# run
 	with tf.Session() as sess:
@@ -41,20 +38,14 @@ def main(data_set="cifar10"):
 		save_name = 'tf.ckpt'
 		restore_name = save_name.split('.')[0] + '_final.ckpt'
 
-		#print('Training')
-		#run(sess, net, mean_loss, train_images, train_labels, batch_size=64, \
-		#	epochs=4, optimizer=optimizer, plot_losses=True, \
-		#	save_model=save_name, load_model=restore_name,
-		#	)
-
 		print('Training')
-		run(sess, net, mean_loss, train_images, train_labels, load_model=restore_name)
+		run(sess, net, train_images, train_labels, batch_size=64, \
+			epochs=4, optimizer=optimizer, plot_losses=True, \
+			save_model=save_name#, load_model=restore_name,
+			)
 
-		print('Validation')		
-		run(sess, net, mean_loss, val_images, val_labels, load_model=restore_name)
-
-		print('Test')
-		run(sess, net, mean_loss, test_images, test_labels, load_model=restore_name)
+		print('Validation')
+		run(sess, net, val_images, val_labels, load_model=restore_name)
 
 
 
@@ -66,13 +57,15 @@ class model(object):
 	def __init__(self, input_dim=(32,32,3), num_classes=10):
 		# setup input
 		self.weight_scale = 1e-2
+		self.reg = 1e-4
+
 		self.X = tf.placeholder(tf.float32, [None, *input_dim])
 		self.y = tf.placeholder(tf.int64, [None])
 		self.is_training = tf.placeholder(tf.bool)
 
-		self.num_fc_hidden1 = 1024
+		self.num_fc_hidden1 = 512
 		self.W = {
-			'W1' : tf.get_variable("fc_W1", shape=[4096, self.num_fc_hidden1]),
+			'W1' : tf.get_variable("fc_W1", shape=[128, self.num_fc_hidden1]),
 			'W2' : tf.get_variable("fc_W2", shape=[self.num_fc_hidden1, num_classes]),
 		}
 		self.b = {
@@ -81,20 +74,28 @@ class model(object):
 		}
 
 		self.logits = self.build_network(self.X)
-		
+
+		softmax_loss = tf.losses.softmax_cross_entropy(onehot_labels=tf.one_hot(self.y, 10), logits=self.logits)
+		mean_loss = tf.reduce_mean(softmax_loss)
+		tf.add_to_collection("losses", mean_loss)
+		self.loss = tf.add_n(tf.get_collection("losses"))
+
 		self.saver = tf.train.Saver()
 
 	def build_network(self, x):
-		out = self.bn_relu_conv(x, 7, 32, is_training=self.is_training, scope='conv1')
+		out = self.bn_relu_conv(x, 7, 16, is_training=self.is_training, scope='conv1')
 
-		out, dense_concat = self.dense_block_6(out, 12, is_training=self.is_training, scope='dense_block_1')
-		out = self.bottle_neck(out, 32, is_training=self.is_training, scope='bottleneck_1')
+		out = self.dense_block_6(out, 16, is_training=self.is_training, scope='dense_block_1')
+		out = self.bottle_neck(out, 16, is_training=self.is_training, scope='bottleneck_1')
 
-		out, dense_concat = self.dense_block_12(out, 32, is_training=self.is_training, scope='dense_block_2')
-		#out, dense_concat = self.dense_block_unit(out, 32, input_dense=dense_concat, is_training=self.is_training, scope='dense_block_2')
-		out = self.bottle_neck(out, 64, is_training=self.is_training, scope='bottleneck_2')
+		out = self.dense_block_12(out, 32, is_training=self.is_training, scope='dense_block_2')
+		out = self.bottle_neck(out, 32, is_training=self.is_training, scope='bottleneck_2')
 
-		out = tf.reshape(out, [-1, 4096])
+		out = self.dense_block_6(out, 16, is_training=self.is_training, scope='dense_block_3')
+
+		out = tf.nn.avg_pool(out, ksize=[1,8,8,1], strides=[1,8,8,1], padding='SAME')
+
+		out = tf.reshape(out, [-1, 128])
 
 		out = tf.nn.relu(tf.matmul(out, self.W['W1']) + self.b['b1'])
 		out = tf.matmul(out, self.W['W2']) + self.b['b2']
@@ -117,8 +118,10 @@ class model(object):
 			dense5 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_5')
 			input_dense = tf.concat([input_dense, dense5], len(x.shape) - 1)
 			dense6 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_6')
-			out = dense6
-		return out, input_dense
+			input_dense = tf.concat([input_dense, dense6], len(x.shape) - 1)
+			out = input_dense
+		return out
+
 	def dense_block_12(self, x, k, is_training, scope, input_dense=None):
 		with tf.variable_scope(scope):
 			if input_dense is None:
@@ -148,8 +151,9 @@ class model(object):
 			dense11 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_11')
 			input_dense = tf.concat([input_dense, dense11], len(x.shape) - 1)
 			dense12 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_12')
-			out = dense12
-		return out, input_dense
+			input_dense = tf.concat([input_dense, dense12], len(x.shape) - 1)
+			out = input_dense
+		return out
 
 	def dense_ceil_layer(self, x, num_filter, is_training, scope):
 		with tf.variable_scope(scope):
@@ -162,14 +166,16 @@ class model(object):
 			W = tf.Variable(self.weight_scale*tf.truncated_normal(shape=[3, 3, tf.cast(x.get_shape()[-1], tf.int64), num_filter], dtype=tf.float32), name='conv_W', trainable=True)
 			out = tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
 			out = tf.nn.max_pool(out, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')
+			tf.add_to_collection("losses", tf.contrib.layers.l2_regularizer(self.reg)(W))
 		return out
 
 	def bn_relu_conv(self, x, ksize, num_filter, is_training, scope):
 		with tf.variable_scope(scope):
 			W = tf.Variable(self.weight_scale*tf.truncated_normal(shape=[ksize, ksize, tf.cast(x.get_shape()[-1], tf.int64), num_filter], dtype=tf.float32), name='conv_W', trainable=True)
 			out = self.batch_norm_layer(x, is_training, 'bn')
-			out = tf.nn.relu(x)
-			out = tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
+			out = tf.nn.relu(out)
+			out = tf.nn.conv2d(out, W, strides=[1,1,1,1], padding='SAME')
+			tf.add_to_collection("losses", tf.contrib.layers.l2_regularizer(self.reg)(W))
 		return out
 
 	def batch_norm_layer(self, x, is_training, scope):
@@ -189,7 +195,7 @@ class model(object):
 		return normed
 
 
-def run(session, net, val_loss, X, y,
+def run(session, net, X, y,
 		epochs=1, batch_size=64, load_model=None, save_model='tf.ckpt',
 		print_every=100, optimizer=None, plot_losses=False):
 	# compute accuracy by tensorflow
@@ -205,7 +211,7 @@ def run(session, net, val_loss, X, y,
 	# setting up variables we want to compute (and optimizing)
 	# if we have a training function, add that to things we compute
 	# or load trained model
-	variables = [val_loss, correct_prediction, accuracy]
+	variables = [net.loss, correct_prediction, accuracy]
 	if is_training:
 		variables[-1] = optimizer
 	
@@ -223,18 +229,17 @@ def run(session, net, val_loss, X, y,
 			# generate indicies for the batch
 			start_idx = (i * batch_size) % X.shape[0]
 			idx = train_indicies[start_idx : start_idx + batch_size]
-		            
-			# create a feed dictionary for this batch
-			feed_dict = {net.X: X[idx,:],
-						 net.y: y[idx],
-						 net.is_training: is_training }
 
 			# get batch size
 			actual_batch_size = y[idx].shape[0]
 	            
 			# have tensorflow compute loss and correct predictions
 			# and (if given) perform a training step
-			loss, corr, _ = session.run(variables, feed_dict=feed_dict)
+			loss, corr, _ = session.run(variables, feed_dict={net.X: X[idx,:],
+															  net.y: y[idx],
+															  net.is_training: is_training,
+															}
+										)
 	            
 			# aggregate performance stats
 			losses.append(loss * actual_batch_size)
