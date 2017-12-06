@@ -85,9 +85,13 @@ def discriminator(x):
     for an image being real for each input image.
 	"""
 	with tf.variable_scope("discriminator"):
-		out = tf.layers.dense(x  , 256, activation=leaky_relu, use_bias=True, name="layer1")
-		out = tf.layers.dense(out, 256, activation=leaky_relu, use_bias=True, name="layer2")
-		out = tf.layers.dense(out, 1  , use_bias=True, name="layer3")
+		input_data = tf.reshape(x, (-1, 28, 28, 1))
+		out = tf.layers.conv2d(input_data, filters=64, kernel_size=4, strides=2, activation=leaky_relu, padding="VALID")
+		out = tf.layers.conv2d(out, filters=128, kernel_size=4, strides=2, activation=leaky_relu, padding="VALID")
+		out = tf.layers.batch_normalization(out, training=True)
+		out = tf.contrib.layers.flatten(out)
+		out = tf.layers.dense(out, 1024, activation=leaky_relu, use_bias=True)
+		out = tf.layers.dense(out, 1  , use_bias=True)
 		logits = out
 		return logits
 
@@ -101,10 +105,15 @@ def generator(z):
     TensorFlow Tensor of generated images, with shape [batch_size, 784].
 	"""
 	with tf.variable_scope("generator"):
-		out = tf.layers.dense(z  , 1024, activation=tf.nn.relu, use_bias=True, name="layer1")
-		out = tf.layers.dense(out, 1024, activation=tf.nn.relu, use_bias=True, name="layer2")
-		out = tf.layers.dense(out, 784, activation=tf.nn.tanh, use_bias=True, name="layer3")
-		img = out
+		out = tf.layers.dense(z  , 1024, activation=tf.nn.relu, use_bias=True)
+		out = tf.layers.batch_normalization(out, training=True)
+		out = tf.layers.dense(out, 6272, activation=tf.nn.relu, use_bias=True)
+		out = tf.layers.batch_normalization(out, training=True)
+		out = tf.reshape(out, (-1, 7, 7, 128))
+		out = tf.layers.conv2d_transpose(out, 64, kernel_size=2, strides=2, activation=tf.nn.relu)
+		out = tf.layers.batch_normalization(out, training=True)
+		out = tf.layers.conv2d_transpose(out, 1 , kernel_size=2, strides=2, activation=tf.nn.tanh)
+		img = tf.contrib.layers.flatten(out)
 		return img
 
 def gan_loss(logits_real, logits_fake):
@@ -128,27 +137,46 @@ def gan_loss(logits_real, logits_fake):
 	return D_loss, G_loss
 
 
-def lsgan_loss(score_real, score_fake):
-	"""Compute the Least Squares GAN loss.
+def wgangp_loss(logits_real, logits_fake, batch_size, x, G_sample):
+	"""Compute the WGAN-GP loss.
     
     Inputs:
-    - score_real: Tensor, shape [batch_size, 1], output of discriminator
-        score for each real image
-    - score_fake: Tensor, shape[batch_size, 1], output of discriminator
-        score for each fake image    
-          
+    - logits_real: Tensor, shape [batch_size, 1], output of discriminator
+        Log probability that the image is real for each real image
+    - logits_fake: Tensor, shape[batch_size, 1], output of discriminator
+        Log probability that the image is real for each fake image
+    - batch_size: The number of examples in this batch
+    - x: the input (real) images for this batch
+    - G_sample: the generated (fake) images for this batch
+    
     Returns:
     - D_loss: discriminator loss scalar
     - G_loss: generator loss scalar
 	"""
 	# TODO: compute D_loss and G_loss
-	D_loss = 0.5 * (tf.reduce_mean(tf.square(score_real - 1)) + tf.reduce_mean(tf.square(score_fake)))
-	G_loss = 0.5 * tf.reduce_mean(tf.square(score_fake - 1))
+	D_loss = - tf.reduce_mean(logits_real) + tf.reduce_mean(logits_fake)
+	G_loss = - tf.reduce_mean(logits_fake)
+
+	# lambda from the paper
+	lam = 10
+
+	# random sample of batch_size (tf.random_uniform)
+	eps = tf.random_uniform(shape=[batch_size, 1],minval=0.,maxval=1.)
+	x_hat = eps * x + (1 - eps) * G_sample
+
+	# Gradients of Gradients is kind of tricky!
+	with tf.variable_scope('', reuse=True) as scope:
+		grad_D_x_hat = tf.gradients(discriminator(x_hat), [x_hat])[0]
+	grad_l2norm = tf.sqrt(tf.reduce_sum(tf.square(grad_D_x_hat), axis=1))
+	grad_pen =  lam * tf.reduce_mean((grad_l2norm - 1.) ** 2)
+
+	D_loss += grad_pen
+
 	return D_loss, G_loss
 
 
 # TODO: create an AdamOptimizer for D_solver and G_solver
-def get_solvers(learning_rate=1e-3, beta1=0.5):
+def get_solvers(learning_rate=1e-4, beta1=0.5, beta2=0.9):
 	"""Create solvers for GAN training.
     
     Inputs:
@@ -159,8 +187,8 @@ def get_solvers(learning_rate=1e-3, beta1=0.5):
     - D_solver: instance of tf.train.AdamOptimizer with correct learning_rate and beta1
     - G_solver: instance of tf.train.AdamOptimizer with correct learning_rate and beta1
 	"""
-	D_solver = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=beta1)
-	G_solver = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=beta1)
+	D_solver = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=beta1, beta2=beta2)
+	G_solver = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=beta1, beta2=beta2)
 	return D_solver, G_solver
 
 
@@ -170,8 +198,7 @@ def main():
 
 	answers = np.load('./utils/gan-checks-tf.npz')
 
-	mnist = input_data.read_data_sets(cfg.MNIST_PATH, one_hot=False)
-
+	mnist = input_data.read_data_sets(cfg.MNIST_PATH, one_hot=False)	
 
 	tf.reset_default_graph()
 
@@ -198,12 +225,11 @@ def main():
 	D_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'discriminator')
 	G_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'generator') 
 
-	# get our solver
+	# get our solver 
 	D_solver, G_solver = get_solvers()
 	
 	# get our loss
-	#D_loss, G_loss = gan_loss(logits_real, logits_fake)
-	D_loss, G_loss = lsgan_loss(logits_real, logits_fake)
+	D_loss, G_loss = wgangp_loss(logits_real, logits_fake, batch_size, x, G_sample)
 
 	# setup training steps
 	D_train_step = D_solver.minimize(D_loss, var_list=D_vars)
@@ -213,7 +239,7 @@ def main():
 
 	# a giant helper function
 	def run_a_gan(sess, G_train_step, G_loss, D_train_step, D_loss, G_extra_step, D_extra_step,\
-	              show_every=250, print_every=50, batch_size=128, num_epoch=10):
+	              show_every=250, print_every=50, batch_size=128, num_epoch=5):
 	    """Train a GAN for a certain number of epochs.
 	    
 	    Inputs:
@@ -237,7 +263,7 @@ def main():
 	            plt.show()
 	            print()
 	        # run a batch of data through the network
-	        minibatch,minbatch_y = mnist.train.next_batch(batch_size)
+	        minibatch, minbatch_y = mnist.train.next_batch(batch_size)
 	        _, D_loss_curr = sess.run([D_train_step, D_loss], feed_dict={x: minibatch})
 	        _, G_loss_curr = sess.run([G_train_step, G_loss])
 
@@ -253,10 +279,8 @@ def main():
 
 	with get_session() as sess:
 		sess.run(tf.global_variables_initializer())
-		run_a_gan(sess, G_train_step, G_loss, D_train_step, D_loss, G_extra_step, D_extra_step,\
-				  show_every=1000)
-
-
+		run_a_gan(sess, G_train_step, G_loss, D_train_step, D_loss, G_extra_step, D_extra_step, batch_size=batch_size, show_every=1000)
+	
 
 
 if __name__ == '__main__':

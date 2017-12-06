@@ -85,9 +85,14 @@ def discriminator(x):
     for an image being real for each input image.
 	"""
 	with tf.variable_scope("discriminator"):
-		out = tf.layers.dense(x  , 256, activation=leaky_relu, use_bias=True, name="layer1")
-		out = tf.layers.dense(out, 256, activation=leaky_relu, use_bias=True, name="layer2")
-		out = tf.layers.dense(out, 1  , use_bias=True, name="layer3")
+		input_data = tf.reshape(x, (-1, 28, 28, 1))
+		out = tf.layers.conv2d(input_data, filters=32, kernel_size=5, activation=leaky_relu, padding="VALID")
+		out = tf.layers.max_pooling2d(out, pool_size=2, strides=2)
+		out = tf.layers.conv2d(out, filters=64, kernel_size=5, activation=leaky_relu, padding="VALID")
+		out = tf.layers.max_pooling2d(out, pool_size=2, strides=2)
+		out = tf.contrib.layers.flatten(out)
+		out = tf.layers.dense(out, 1024, activation=leaky_relu, use_bias=True)
+		out = tf.layers.dense(out, 1  , use_bias=True)
 		logits = out
 		return logits
 
@@ -101,9 +106,14 @@ def generator(z):
     TensorFlow Tensor of generated images, with shape [batch_size, 784].
 	"""
 	with tf.variable_scope("generator"):
-		out = tf.layers.dense(z  , 1024, activation=tf.nn.relu, use_bias=True, name="layer1")
-		out = tf.layers.dense(out, 1024, activation=tf.nn.relu, use_bias=True, name="layer2")
-		out = tf.layers.dense(out, 784, activation=tf.nn.tanh, use_bias=True, name="layer3")
+		out = tf.layers.dense(z  , 1024, activation=tf.nn.relu, use_bias=True)
+		out = tf.layers.batch_normalization(out, training=True)
+		out = tf.layers.dense(out, 6272, activation=tf.nn.relu, use_bias=True)
+		out = tf.layers.batch_normalization(out, training=True)
+		out = tf.reshape(out, (-1, 7, 7, 128))
+		out = tf.layers.conv2d_transpose(out, 64, kernel_size=2, strides=2, activation=tf.nn.relu)
+		out = tf.layers.batch_normalization(out, training=True)
+		out = tf.layers.conv2d_transpose(out, 1 , kernel_size=2, strides=2, activation=tf.nn.tanh)
 		img = out
 		return img
 
@@ -170,8 +180,7 @@ def main():
 
 	answers = np.load('./utils/gan-checks-tf.npz')
 
-	mnist = input_data.read_data_sets(cfg.MNIST_PATH, one_hot=False)
-
+	mnist = input_data.read_data_sets(cfg.MNIST_PATH, one_hot=False)	
 
 	tf.reset_default_graph()
 
@@ -213,7 +222,7 @@ def main():
 
 	# a giant helper function
 	def run_a_gan(sess, G_train_step, G_loss, D_train_step, D_loss, G_extra_step, D_extra_step,\
-	              show_every=250, print_every=50, batch_size=128, num_epoch=10):
+	              show_every=250, print_every=50, batch_size=128, num_epoch=5):
 	    """Train a GAN for a certain number of epochs.
 	    
 	    Inputs:
@@ -237,7 +246,7 @@ def main():
 	            plt.show()
 	            print()
 	        # run a batch of data through the network
-	        minibatch,minbatch_y = mnist.train.next_batch(batch_size)
+	        minibatch, minbatch_y = mnist.train.next_batch(batch_size)
 	        _, D_loss_curr = sess.run([D_train_step, D_loss], feed_dict={x: minibatch})
 	        _, G_loss_curr = sess.run([G_train_step, G_loss])
 
@@ -253,9 +262,8 @@ def main():
 
 	with get_session() as sess:
 		sess.run(tf.global_variables_initializer())
-		run_a_gan(sess, G_train_step, G_loss, D_train_step, D_loss, G_extra_step, D_extra_step,\
-				  show_every=1000)
-
+		run_a_gan(sess, G_train_step, G_loss, D_train_step, D_loss, G_extra_step, D_extra_step, show_every=1000)
+	
 
 
 
