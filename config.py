@@ -7,7 +7,7 @@ import h5py
 
 SRC_PATH = "./src"
 MODEL_PATH = "./model"
-DATA_PATH = "E:/cs231n/data"
+DATA_PATH = "E:/data"
 MNIST_PATH = os.path.join(DATA_PATH, "mnist")
 CIFAR10_PATH = os.path.join(DATA_PATH, "cifar-10-batches-py")
 

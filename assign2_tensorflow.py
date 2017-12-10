@@ -27,9 +27,10 @@ def main(data_set="cifar10"):
 
 	# init network
 	net = model(input_dim=(32, 32, 3))
+	net.reg = 5e-5
 
 	# define optimizer
-	optimizer = tf.train.AdamOptimizer(5e-3).minimize(net.loss)
+	optimizer = tf.train.AdamOptimizer(5e-4).minimize(net.loss)
 
 	# run
 	with tf.Session() as sess:
@@ -50,149 +51,50 @@ def main(data_set="cifar10"):
 
 
 class model(object):
-	'''
-		architectures:
-		
-	'''
-	def __init__(self, input_dim=(32,32,3), num_classes=10):
-		# setup input
-		self.weight_scale = 1e-2
-		self.reg = 1e-4
+    def __init__(self, input_dim=(32,32,3), num_classes=10):
+        self.num_classes = num_classes
+        self.reg = 5e-4
 
-		self.X = tf.placeholder(tf.float32, [None, *input_dim])
-		self.y = tf.placeholder(tf.int64, [None])
-		self.is_training = tf.placeholder(tf.bool)
+        self.X = tf.placeholder(tf.float32, [None, *input_dim])
+        self.y = tf.placeholder(tf.int64, [None])
+        self.is_training = tf.placeholder(tf.bool)
 
-		self.num_fc_hidden1 = 512
-		self.W = {
-			'W1' : tf.get_variable("fc_W1", shape=[128, self.num_fc_hidden1]),
-			'W2' : tf.get_variable("fc_W2", shape=[self.num_fc_hidden1, num_classes]),
-		}
-		self.b = {
-			'b1' : tf.get_variable("fc_b1", shape=[self.num_fc_hidden1]),
-			'b2' : tf.get_variable("fc_b2", shape=[num_classes]),
-		}
+        self.logits = self.build_network(self.X)
 
-		self.logits = self.build_network(self.X)
+        self.softmax_loss = tf.losses.softmax_cross_entropy(onehot_labels=tf.one_hot(self.y, 10), logits=self.logits)
+        self.l2_loss = tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+        self.loss = self.softmax_loss + self.l2_loss
 
-		softmax_loss = tf.losses.softmax_cross_entropy(onehot_labels=tf.one_hot(self.y, 10), logits=self.logits)
-		mean_loss = tf.reduce_mean(softmax_loss)
-		tf.add_to_collection("losses", mean_loss)
-		self.loss = tf.add_n(tf.get_collection("losses"))
+        self.saver = tf.train.Saver()
 
-		self.saver = tf.train.Saver()
-
-	def build_network(self, x):
-		out = self.bn_relu_conv(x, 7, 16, is_training=self.is_training, scope='conv1')
-
-		out = self.dense_block_6(out, 16, is_training=self.is_training, scope='dense_block_1')
-		out = self.bottle_neck(out, 16, is_training=self.is_training, scope='bottleneck_1')
-
-		out = self.dense_block_12(out, 32, is_training=self.is_training, scope='dense_block_2')
-		out = self.bottle_neck(out, 32, is_training=self.is_training, scope='bottleneck_2')
-
-		out = self.dense_block_6(out, 16, is_training=self.is_training, scope='dense_block_3')
-
-		out = tf.nn.avg_pool(out, ksize=[1,8,8,1], strides=[1,8,8,1], padding='SAME')
-
-		out = tf.reshape(out, [-1, 128])
-
-		out = tf.nn.relu(tf.matmul(out, self.W['W1']) + self.b['b1'])
-		out = tf.matmul(out, self.W['W2']) + self.b['b2']
-		return out
-
-	def dense_block_6(self, x, k, is_training, scope, input_dense=None):
-		with tf.variable_scope(scope):
-			if input_dense is None:
-				input_dense = x
-			else:
-				input_dense = tf.concat([input_dense, x], len(x.shape) - 1)
-			dense1 = self.dense_ceil_layer(x, k, is_training=is_training, scope='dense_ceil_1')
-			input_dense = tf.concat([x, dense1], len(x.shape) - 1)
-			dense2 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_2')
-			input_dense = tf.concat([input_dense, dense2], len(x.shape) - 1)
-			dense3 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_3')
-			input_dense = tf.concat([input_dense, dense3], len(x.shape) - 1)
-			dense4 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_4')
-			input_dense = tf.concat([input_dense, dense4], len(x.shape) - 1)
-			dense5 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_5')
-			input_dense = tf.concat([input_dense, dense5], len(x.shape) - 1)
-			dense6 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_6')
-			input_dense = tf.concat([input_dense, dense6], len(x.shape) - 1)
-			out = input_dense
-		return out
-
-	def dense_block_12(self, x, k, is_training, scope, input_dense=None):
-		with tf.variable_scope(scope):
-			if input_dense is None:
-				input_dense = x
-			else:
-				input_dense = tf.concat([input_dense, x], len(x.shape) - 1)
-			dense1 = self.dense_ceil_layer(x, k, is_training=is_training, scope='dense_ceil_1')
-			input_dense = tf.concat([x, dense1], len(x.shape) - 1)
-			dense2 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_2')
-			input_dense = tf.concat([input_dense, dense2], len(x.shape) - 1)
-			dense3 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_3')
-			input_dense = tf.concat([input_dense, dense3], len(x.shape) - 1)
-			dense4 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_4')
-			input_dense = tf.concat([input_dense, dense4], len(x.shape) - 1)
-			dense5 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_5')
-			input_dense = tf.concat([input_dense, dense5], len(x.shape) - 1)
-			dense6 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_6')
-			input_dense = tf.concat([input_dense, dense6], len(x.shape) - 1)
-			dense7 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_7')
-			input_dense = tf.concat([input_dense, dense7], len(x.shape) - 1)
-			dense8 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_8')
-			input_dense = tf.concat([input_dense, dense8], len(x.shape) - 1)
-			dense9 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_9')
-			input_dense = tf.concat([input_dense, dense9], len(x.shape) - 1)
-			dense10 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_10')
-			input_dense = tf.concat([input_dense, dense10], len(x.shape) - 1)
-			dense11 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_11')
-			input_dense = tf.concat([input_dense, dense11], len(x.shape) - 1)
-			dense12 = self.dense_ceil_layer(input_dense, k, is_training=is_training, scope='dense_ceil_12')
-			input_dense = tf.concat([input_dense, dense12], len(x.shape) - 1)
-			out = input_dense
-		return out
-
-	def dense_ceil_layer(self, x, num_filter, is_training, scope):
-		with tf.variable_scope(scope):
-			out = self.bn_relu_conv(x, ksize=1, num_filter=num_filter, is_training=is_training, scope='conv1')
-			out = self.bn_relu_conv(out, ksize=3, num_filter=num_filter, is_training=is_training, scope='conv2')
-		return out
-
-	def bottle_neck(self, x, num_filter, is_training, scope):
-		with tf.variable_scope(scope):
-			W = tf.Variable(self.weight_scale*tf.truncated_normal(shape=[3, 3, tf.cast(x.get_shape()[-1], tf.int64), num_filter], dtype=tf.float32), name='conv_W', trainable=True)
-			out = tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
-			out = tf.nn.max_pool(out, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')
-			tf.add_to_collection("losses", tf.contrib.layers.l2_regularizer(self.reg)(W))
-		return out
-
-	def bn_relu_conv(self, x, ksize, num_filter, is_training, scope):
-		with tf.variable_scope(scope):
-			W = tf.Variable(self.weight_scale*tf.truncated_normal(shape=[ksize, ksize, tf.cast(x.get_shape()[-1], tf.int64), num_filter], dtype=tf.float32), name='conv_W', trainable=True)
-			out = self.batch_norm_layer(x, is_training, 'bn')
-			out = tf.nn.relu(out)
-			out = tf.nn.conv2d(out, W, strides=[1,1,1,1], padding='SAME')
-			tf.add_to_collection("losses", tf.contrib.layers.l2_regularizer(self.reg)(W))
-		return out
-
-	def batch_norm_layer(self, x, is_training, scope):
-		with tf.variable_scope(scope):
-			beta = tf.Variable(tf.constant(0.0, shape=[x.shape[-1]]), name='beta', trainable=True)
-			gamma = tf.Variable(tf.constant(1.0, shape=[x.shape[-1]]), name='gamma', trainable=True)
-			axises = list(range(len(x.shape) - 1))
-			batch_mean, batch_var = tf.nn.moments(x, axises, name='moments')
-			ema = tf.train.ExponentialMovingAverage(decay=0.5)
-			def mean_var_with_update():
-				ema_apply_op = ema.apply([batch_mean, batch_var])
-				with tf.control_dependencies([ema_apply_op]):
-					return tf.identity(batch_mean), tf.identity(batch_var)
-			mean, var = tf.cond(is_training, mean_var_with_update,
-                            lambda: (ema.average(batch_mean), ema.average(batch_var)))
-			normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
-		return normed
+    def build_network(self, X):
+        out = self.conv_stack(X, filters=128, kernel_size=3)
+        out = tf.layers.max_pooling2d(out, pool_size=2, strides=2)
+        
+        out = self.conv_stack(out, filters=128, kernel_size=3)
+        out = tf.layers.max_pooling2d(out, pool_size=2, strides=2)
+        
+        out = self.conv_stack(out, filters=256, kernel_size=5)
+        out = self.conv_stack(out, filters=256, kernel_size=5)
+        out = tf.layers.max_pooling2d(out, pool_size=2, strides=2)
+        
+        out = self.conv_stack(out, filters=128, kernel_size=3)
+        out = self.conv_stack(out, filters=128, kernel_size=3)
+        
+        out = tf.contrib.layers.flatten(out)
+        out = tf.layers.dense(out, 1024, activation=tf.nn.relu)
+        out = tf.layers.dropout(out, rate=0.5, training=self.is_training)
+        out = tf.layers.dense(out, 1024, activation=tf.nn.relu)
+        out = tf.layers.dropout(out, rate=0.5, training=self.is_training)
+        out = tf.layers.dense(out, self.num_classes)
+        return out
+    
+    def conv_stack(self, X, filters, kernel_size, activation=tf.nn.relu, padding="SAME"):
+        out = tf.layers.conv2d(X, filters=filters, kernel_size=kernel_size, padding=padding, activation=None, \
+                               kernel_regularizer=tf.contrib.layers.l2_regularizer(self.reg), reuse=False)
+        #out = tf.contrib.layers.batch_norm(out,decay=0.9,is_training=self.is_training,zero_debias_moving_mean=True,scale=True,reuse=False)
+        out = tf.nn.relu(out)
+        return out
 
 
 def run(session, net, X, y,
@@ -232,7 +134,7 @@ def run(session, net, X, y,
 
 			# get batch size
 			actual_batch_size = y[idx].shape[0]
-	            
+
 			# have tensorflow compute loss and correct predictions
 			# and (if given) perform a training step
 			loss, corr, _ = session.run(variables, feed_dict={net.X: X[idx,:],
@@ -240,7 +142,7 @@ def run(session, net, X, y,
 															  net.is_training: is_training,
 															}
 										)
-	            
+
 			# aggregate performance stats
 			losses.append(loss * actual_batch_size)
 			correct += np.sum(corr)
