@@ -14,7 +14,7 @@ def show_example(train_images, train_labels, classes, num_classes, samples_per_c
 		for i, idx in enumerate(idxs):
 			plt_idx = i * num_classes + y + 1
 			plt.subplot(samples_per_class, num_classes, plt_idx)
-			plt.imshow(train_images[idx].reshape(3, 32, 32).transpose(1,2,0))
+			plt.imshow(train_images[idx].reshape(3, 32, 32).transpose(1,2,0).astype(np.uint8))
 			plt.axis('off')
 			if i == 0: plt.title(class_name)
 	plt.show()
@@ -22,7 +22,7 @@ def show_example(train_images, train_labels, classes, num_classes, samples_per_c
 
 def main():
 
-	k_list = [1, 3, 6]
+	k_list = list(range(1, 10))
 
 	# load cifar10 data set
 	train_images, train_labels, val_images, val_labels, test_images, test_labels = cfg.load_cifar10()		
@@ -32,8 +32,9 @@ def main():
 	# display some examples
 	#show_example(train_images, train_labels, classes, num_classes)
 
+
 	# Subsample the data for more efficient code execution in this exercise
-	num_train = 5000
+	num_train = 10000
 	mask = list(range(num_train))
 	train_images = train_images[mask]
 	train_labels = train_labels[mask]
@@ -44,17 +45,25 @@ def main():
 
 	# Build k nearest neighbor classifier
 	classifier = knn()
-	
-	for k in k_list:
-		# training
-		classifier.train(train_images, train_labels)
 
+	# training
+	classifier.train(train_images, train_labels)
+
+	acc_list = []
+	for k in k_list:
 		# predict
 		predict_labels = classifier.predict(test_images, k=k)
 
 		# calc acc
 		acc = np.sum(np.array(predict_labels == test_labels).astype(float)) / num_test
+
+		acc_list.append(acc)
 		print("k :", k,"  Test accuracy :", acc)
+
+	plt.plot(k_list, acc_list, '-o')
+	plt.xlabel('k')
+	plt.ylabel('accuracy')
+	plt.show()
 
 	
 class knn(object):

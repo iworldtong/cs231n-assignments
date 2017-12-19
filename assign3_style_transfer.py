@@ -281,7 +281,7 @@ def main():
 
 	params1 = {
 		'content_image' : os.path.join(cfg.SRC_PATH, 'tubingen.jpg'),
-		'style_image' : os.path.join(cfg.SRC_PATH, 'starry_night.jpg'),
+		'style_image' : os.path.join(cfg.SRC_PATH, 'the_scream.jpg'),
 		'image_size' : 192,
 		'style_size' : 192,
 		'content_layer' : 3,
